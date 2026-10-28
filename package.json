@@ -1,1 +1,62 @@
-{"name":"buscadr-mvp","version":"0.1.0","private":true,"description":"buscaDR — MVP médico con demo navegador y API local experimental","type":"module","scripts":{"start":"node --experimental-sqlite server/server.mjs","test":"node --test tests/*.test.mjs","check":"node --check public/app.js && node --check server/server.mjs","serve:static":"python3 -m http.server 8080 --directory public"},"engines":{"node":">=22"}}
+{
+  "name": "buscadr",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "buscaDR: directorio médico y SaaS de agenda para profesionales y clínicas de Ecuador. Citas presenciales y virtuales, pagos registrados en la app, WhatsApp y CMS Maestro. Cloudflare Workers + D1, API Hono y web React Router con SSR.",
+  "engines": {
+    "node": ">=22.22"
+  },
+  "scripts": {
+    "dev": "react-router dev",
+    "start": "npm run dev",
+    "build": "react-router build",
+    "preview": "npm run build && vite preview",
+    "typegen": "wrangler types -c wrangler.app.jsonc && react-router typegen",
+    "typecheck": "npm run typegen && tsc -b",
+    "lint": "biome lint .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:e2e": "node e2e/smoke.mjs",
+    "test:layout": "node e2e/layout-audit.mjs",
+    "db:migrate:local": "wrangler d1 migrations apply buscadr-db --local -c wrangler.app.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply buscadr-db --remote",
+    "deploy": "npm run build && wrangler deploy",
+    "check": "node scripts/check-wrangler.mjs && npm run typecheck && npm run lint && npm test && npm run build",
+    "deploy:dry": "wrangler deploy --dry-run",
+    "icons": "node scripts/build-icons.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
+    "@fortawesome/free-brands-svg-icons": "7.3.1",
+    "@fortawesome/free-regular-svg-icons": "7.3.1",
+    "@fortawesome/free-solid-svg-icons": "7.3.1",
+    "hono": "^4.13.14",
+    "isbot": "^5.2.2",
+    "leaflet": "^1.9.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^8.5.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
+    "@cloudflare/vite-plugin": "^1.65.0",
+    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@react-router/dev": "^8.5.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^22.19.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitest/runner": "^4.1.12",
+    "@vitest/snapshot": "^4.1.12",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.5",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.152.0"
+  }
+}

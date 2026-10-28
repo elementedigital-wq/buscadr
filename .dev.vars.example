@@ -1,0 +1,16 @@
+# Copia a .dev.vars para desarrollo local (no subir a Git). En producción usa secretos de Cloudflare.
+# El correo del propietario del CMS es elemente.digital@gmail.com (fijo en el código).
+# En local puedes usar otro correo solo con BUSCADR_ENV=development.
+BUSCADR_ENV="development"
+BUSCADR_ADMIN_EMAIL="elemente.digital@gmail.com"
+BUSCADR_ADMIN_PASSWORD="cambia-esta-clave-local"
+# RESEND_API_KEY=""            # correo: recuperación de contraseña del CMS y avisos de citas
+# BUSCADR_MAIL_FROM=""         # p. ej. "buscaDR <citas@tu-dominio>"
+# GOOGLE_CLIENT_ID=""
+# WHATSAPP_TOKEN=""
+# WHATSAPP_PHONE_ID=""
+# WHATSAPP_APP_SECRET=""
+# WHATSAPP_VERIFY_TOKEN=""
+# BUSCADR_SUPPORT_WHATSAPP=""  # número de WhatsApp Business de buscaDR (0991234567)
+# PAYPHONE_TOKEN=""            # pasarela real (Payphone Ecuador); sin él, pagos en modo sandbox
+# PAYPHONE_STORE_ID=""

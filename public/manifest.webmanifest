@@ -1,1 +1,20 @@
-{"name":"buscaDR — Directorio médico","short_name":"buscaDR","description":"Demo de directorio y agenda de citas médicas en Ecuador","start_url":"/","display":"standalone","background_color":"#f7fbff","theme_color":"#086fda","icons":[{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "buscaDR · Herramientas a tu alcance",
+  "short_name": "buscaDR",
+  "description": "Alquila herramientas y equipos cerca de ti en Guayaquil, Samborondón y Daule, o publica los tuyos.",
+  "lang": "es-EC",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5F4489",
+  "icons": [
+    { "src": "/assets/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Explorar equipos", "url": "/explorar" },
+    { "name": "Mis reservas", "url": "/reservas" },
+    { "name": "Publicar un equipo", "url": "/publicar" }
+  ]
+}

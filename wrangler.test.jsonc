@@ -1,0 +1,16 @@
+{
+  // Configuración SOLO para pruebas (Vitest + workerd). No se despliega.
+  "name": "buscadr-test",
+  "compatibility_date": "2026-10-20",
+  "d1_databases": [{ "binding": "DB", "database_name": "buscadr-test", "database_id": "00000000-0000-0000-0000-000000000000", "migrations_dir": "migrations" }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "buscadr-media-test" }],
+  "vars": {
+    "BUSCADR_ENV": "test",
+    "BUSCADR_FEE_BPS": "800",
+    "BUSCADR_PAYMENTS": "sandbox",
+    "BUSCADR_ADMIN_EMAIL": "admin@buscadr.test",
+    "BUSCADR_ADMIN_PASSWORD": "admin-test-password-123",
+    "WHATSAPP_APP_SECRET": "test-app-secret",
+    "WHATSAPP_VERIFY_TOKEN": "test-verify-token"
+  }
+}

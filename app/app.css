@@ -1,0 +1,201 @@
+@import "tailwindcss";
+@import "@fontsource-variable/manrope";
+@import "@fontsource-variable/inter";
+
+/*
+ * Tokens de marca: HEX oficiales del Brand Deck buscaDR (lámina 04). Las variaciones (hover, fondos
+ * suaves) se derivan con color-mix(); no se inventan colores nuevos.
+ * Accesibilidad (WCAG 2.2 AA): turquesa (#00AAB0, 2,9:1) y azul acento (#3E85AE, 4,1:1) NO se
+ * usan como texto pequeño sobre blanco. Texto: tinta (15:1), morado (7,8:1) o gris medio (5,3:1).
+ * Botón turquesa: con texto tinta, nunca blanco.
+ */
+@theme {
+  --color-morado: #5f4489;
+  --color-turquesa: #00aab0;
+  --color-azul: #3e85ae;
+  --color-gris: #5e5f63;
+  --color-lila: #efeaf7;
+  --color-tinta: #1c1a3a;
+  --color-fondo: #f7f7fb;
+  --color-gris-claro: #ececf2;
+  --color-alerta: #b42345;
+
+  --font-display: "Manrope Variable", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 1.25rem;
+  --shadow-card: 0 1px 2px rgb(28 26 58 / 0.06), 0 10px 28px rgb(95 68 137 / 0.08);
+}
+
+@layer base {
+  :root {
+    --brand-primary: var(--color-morado);
+    --brand-secondary: var(--color-turquesa);
+    color-scheme: light;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-fondo text-tinta font-sans antialiased;
+  }
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight text-tinta;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-turquesa);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@utility container-page {
+  @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+}
+@utility card {
+  @apply rounded-[var(--radius-card)] bg-[var(--brand-surface,#fff)] shadow-[var(--shadow-card)] ring-1 ring-black/5;
+}
+/*
+ * Botones: alto mínimo táctil de 44 px, relleno horizontal y vertical, el texto puede pasar a una
+ * segunda línea centrada pero nunca sale del botón (max-width + overflow-wrap).
+ */
+@utility btn {
+  @apply inline-flex min-h-11 max-w-full min-w-0 items-center justify-center gap-2 px-5 py-2 text-center text-[15px] leading-tight font-semibold transition select-none disabled:cursor-not-allowed disabled:opacity-50;
+  overflow-wrap: anywhere;
+  border-radius: var(--btn-radius, 9999px);
+  & > svg {
+    flex-shrink: 0;
+  }
+}
+@utility btn-primary {
+  @apply btn text-white;
+  background: var(--brand-primary);
+  &:hover {
+    background: color-mix(in oklab, var(--brand-primary) 85%, black);
+  }
+}
+@utility btn-accent {
+  @apply btn text-tinta;
+  background: var(--brand-secondary);
+  &:hover {
+    background: color-mix(in oklab, var(--brand-secondary) 85%, white);
+  }
+}
+@utility btn-outline {
+  @apply btn bg-white text-morado ring-1 ring-morado/30 hover:ring-morado;
+}
+@utility btn-ghost {
+  @apply btn text-morado hover:bg-morado/5;
+}
+@utility btn-danger {
+  @apply btn bg-white text-alerta ring-1 ring-alerta/40 hover:bg-alerta/5;
+}
+@utility chip {
+  @apply inline-flex max-w-full min-w-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm leading-tight font-medium;
+  overflow-wrap: anywhere;
+  & > svg {
+    flex-shrink: 0;
+  }
+}
+/* Recuadros de iconos por tono (derivados de la paleta de marca con color-mix). */
+@utility tone-morado {
+  background: color-mix(in oklab, var(--color-morado) 11%, white);
+  color: var(--color-morado);
+}
+@utility tone-turquesa {
+  background: color-mix(in oklab, var(--color-turquesa) 15%, white);
+  color: color-mix(in oklab, var(--color-turquesa) 62%, black);
+}
+@utility tone-azul {
+  background: color-mix(in oklab, var(--color-azul) 13%, white);
+  color: color-mix(in oklab, var(--color-azul) 85%, black);
+}
+@utility tone-neutro {
+  background: color-mix(in oklab, var(--color-gris) 10%, white);
+  color: var(--color-tinta);
+}
+/* Tarjeta de categoría (fondo suave del tono + borde). */
+@utility tone-card-morado {
+  background: color-mix(in oklab, var(--color-morado) 6%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-morado) 14%, white);
+}
+@utility tone-card-turquesa {
+  background: color-mix(in oklab, var(--color-turquesa) 8%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-turquesa) 22%, white);
+}
+@utility tone-card-azul {
+  background: color-mix(in oklab, var(--color-azul) 7%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-azul) 18%, white);
+}
+@utility tone-card-neutro {
+  background: color-mix(in oklab, var(--color-gris) 5%, white);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-gris) 14%, white);
+}
+/* Tarjeta «Resumen buscaDR»: degradado suave lila → blanco (como el Brand Deck). */
+@utility surface-brief {
+  background:
+    radial-gradient(120% 90% at 0% 0%, color-mix(in oklab, var(--color-morado) 14%, white) 0%, transparent 60%),
+    radial-gradient(90% 80% at 100% 100%, color-mix(in oklab, var(--color-turquesa) 14%, white) 0%, transparent 60%), white;
+}
+/* Botón de icono circular (volver, compartir, favorito, notificaciones). */
+@utility icon-btn {
+  @apply inline-grid size-11 shrink-0 place-items-center rounded-full bg-white text-tinta shadow-sm ring-1 ring-black/10 transition hover:ring-morado/40;
+}
+/* Fila con desplazamiento horizontal sin barra visible (categorías, filtros, días). */
+@utility scroll-row {
+  @apply -mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2 sm:-mx-6 sm:scroll-px-6 sm:px-6;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+@utility field {
+  @apply flex flex-col gap-1.5 text-sm font-medium text-tinta;
+}
+@utility input {
+  @apply min-h-11 w-full rounded-xl border border-black/15 bg-white px-3.5 text-base text-tinta placeholder:text-gris/75 focus:border-morado focus:outline-none focus:ring-2 focus:ring-morado/20;
+}
+@utility label-eyebrow {
+  @apply text-xs font-bold uppercase tracking-[0.14em] text-morado;
+}
+@utility muted {
+  @apply text-gris;
+}
+
+/* Formas orgánicas del Brand Deck (decorativas, sin texto). */
+.blob-morado {
+  border-radius: 62% 38% 46% 54% / 55% 46% 54% 45%;
+  background: var(--color-morado);
+}
+.blob-turquesa {
+  border-radius: 42% 58% 63% 37% / 47% 39% 61% 53%;
+  background: var(--color-turquesa);
+}
+
+/* Vista previa del CMS Maestro: en modo «seleccionar», los elementos editables se resaltan. */
+html.cms-select [data-cms] {
+  cursor: pointer;
+}
+html.cms-select [data-cms]:hover {
+  outline: 2px dashed var(--color-turquesa);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Turquesa legible para texto pequeño (el turquesa puro no alcanza 4,5:1 sobre blanco). */
+@utility text-turquesa-ink {
+  color: color-mix(in oklab, var(--color-turquesa) 62%, black);
+}

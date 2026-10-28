@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es-EC"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Diagnóstico · buscaDR</title>
+<style>body{font-family:system-ui,sans-serif;background:#f7f7fb;color:#1C1A3A;margin:0}main{max-width:680px;margin:6vh auto;padding:24px;background:#fff;border-radius:20px;box-shadow:0 8px 24px rgb(23 51 69/.08)}h1{margin-top:0}code,pre{background:#f0f4f6;border-radius:8px;padding:2px 6px}pre{padding:12px;white-space:pre-wrap}li{margin:6px 0}</style></head>
+<body><main>
+<img src="/assets/buscadr-logo.png" alt="buscaDR" width="140">
+<h1>Diagnóstico del despliegue</h1>
+<ol id="checks"><li>Comprobando…</li></ol>
+<h2>Cómo resolver</h2>
+<ul>
+<li><b>D1_BINDING_MISSING</b>: vincula la base <code>buscadr-db</code> con el binding <code>DB</code> y vuelve a desplegar.</li>
+<li><b>MIGRATIONS_PENDING</b>: ejecuta <code>npx wrangler d1 migrations apply buscadr-db --remote</code> (aditivas, ver docs/OPERACION_D1.md).</li>
+<li><b>La API responde HTML</b>: el Worker no está desplegado con <code>workers/app.ts</code>; ejecuta <code>npm run deploy</code>.</li>
+</ul>
+<pre id="raw"></pre>
+</main>
+<script>
+(async function(){
+  const list=document.getElementById('checks');const raw=document.getElementById('raw');list.innerHTML='';
+  async function probe(path){
+    const li=document.createElement('li');li.textContent=path+': …';list.appendChild(li);
+    try{const r=await fetch(path,{cache:'no-store',signal:AbortSignal.timeout(6000)});const type=r.headers.get('content-type')||'';
+      if(!type.includes('json')){li.textContent=path+': ✗ responde '+(type||'sin tipo')+' (Worker no desplegado)';return;}
+      const j=await r.json();raw.textContent+=path+' → '+JSON.stringify(j,null,1)+'\n';
+      li.textContent=path+': '+(r.ok?'✓ OK':'✗ '+(j.code||r.status)+' — '+(j.error||''));
+    }catch(e){li.textContent=path+': ✗ sin respuesta';}
+  }
+  await probe('/api/ping');await probe('/api/health');await probe('/api/cms/setup');
+})();
+</script>
+</body></html>

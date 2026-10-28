@@ -1,0 +1,33 @@
+{
+  // buscaDR · Configuración de CÓDIGO FUENTE que usa Vite (@cloudflare/vite-plugin) para compilar
+  // y para `npm run dev`. El despliegue usa wrangler.jsonc. Mantén ambos con los mismos bindings.
+  // Worker único: API Hono (/api/*) + web React Router con SSR.
+  // Secretos (solo en Cloudflare, nunca aquí): BUSCADR_ADMIN_PASSWORD (contraseña inicial del CMS),
+  // RESEND_API_KEY, GOOGLE_CLIENT_ID, WHATSAPP_TOKEN, WHATSAPP_PHONE_ID, WHATSAPP_APP_SECRET,
+  // WHATSAPP_VERIFY_TOKEN, PAYPHONE_TOKEN, PAYPHONE_STORE_ID.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buscadr",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-10-20",
+  "keep_vars": true,
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "vars": {
+    "BUSCADR_ENV": "pilot",
+    "BUSCADR_FEE_BPS": "800",
+    "BUSCADR_PAYMENTS": "sandbox"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "buscadr-db",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // R2 es opcional. Sin él, las fotos de perfiles y del CMS se guardan en D1.
+  // "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "buscadr-media" }],
+  "triggers": {
+    // Cada 30 min: vence solicitudes sin respuesta, recordatorios 24 h y 1 h, limpia sesiones.
+    "crons": ["*/30 * * * *"]
+  }
+}

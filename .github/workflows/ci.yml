@@ -1,12 +1,28 @@
-name: Validate MVP
-on: [push, pull_request]
+name: buscaDR CI
+on:
+  push:
+    branches: [main]
+  pull_request:
 jobs:
-  checks:
+  verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: npm run check
-      - run: npm test
+          node-version: "22.22"
+          cache: npm
+      - run: npm ci
+      - name: Configuración de Wrangler sincronizada
+        run: node scripts/check-wrangler.mjs
+      - name: Tipos (wrangler types + react-router typegen + tsc)
+        run: npm run typecheck
+      - name: Lint (Biome)
+        run: npm run lint
+      - name: Pruebas en workerd con D1 y migraciones reales
+        run: npm test
+      - name: Build de producción
+        run: npm run build
+      - name: Simulación de despliegue (sin publicar)
+        run: npx wrangler deploy --dry-run

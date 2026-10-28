@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /maestro
+Disallow: /admin
+Disallow: /cuenta
+Disallow: /reservas
+Disallow: /panel
+Disallow: /favoritos
+Sitemap: /sitemap.xml

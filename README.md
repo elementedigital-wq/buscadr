@@ -1,73 +1,49 @@
-# buscaDR — Premium MVP / Ecuador
+# buscaDR — Herramientas y equipos a tu alcance
 
-**Estado: demo navegable + API local de desarrollo, no producción clínica.**
+Marketplace de alquiler de herramientas y equipos entre personas, por horas, días o semanas. Piloto en **Guayaquil, Samborondón y Daule** (Ecuador). Durante el piloto **no se procesan pagos** dentro de buscaDR: se muestra el precio total y el pago se coordina al retirar.
 
-Basado en `01_buscaDR_Documento_Maestro`, `02_buscaDR_Estructura_de_Aplicacion` y `Brand Deck buscaDR` (octubre 2026). Directorio médico gratuito para pacientes, SaaS para médicos independientes y clínicas. La plataforma no diagnostica, no atiende emergencias ni gestiona historias clínicas.
+> v0.6 (26-oct-2026): portada personalizada, reserva en 3 pasos, iconografía Font Awesome editable, tipografías de Google Fonts o propias, y acceso exclusivo del propietario con cambio y recuperación de contraseña. Mismo Worker `buscadr` y misma D1 `buscadr-db`. Ver `CHANGELOG.md`.
 
-## Qué está construido
+## Qué incluye
 
-- Landing premium con logotipo extraído del Brand Deck original, hero médico, sistema visual Inter y colores azul/verde.
-- Búsqueda por nombre, ciudad, especialidad, tarifas ficticias, calificación ficticia y cercanía calculada con fórmula Haversine.
-- Mapa Leaflet/OpenStreetMap cuando hay conexión; fallback informativo accesible cuando no la hay. Marcadores geográficos ficticios.
-- 12 profesionales y ocho especialidades ilustrativas; fotografías de referencia, tarjetas, perfiles, reseñas y medallas inequívocamente marcados como datos de prueba.
-- Registro local de prueba como **paciente** y como **profesional**, sin recoger contraseñas ni datos reales. Sesión de prueba en `sessionStorage`, información local en `localStorage`.
-- Flujo demostrativo de selección de fecha/horario, solicitud de cita, prevención local de doble reserva, confirmación, atención, cancelación y reseña tras cita completada.
-- Dashboards de paciente, profesional y administración; edición de perfil profesional de prueba, agenda, mensajes privados de prueba y favoritos.
-- Tarjetas de planes Free, Agenda $15, Pro $29, Growth $59 y Clinic desde $119: son **hipótesis comerciales**, no pagos activados.
-- Servidor HTTP Node de **desarrollo local separado**: almacenamiento real SQLite, signup/login por contraseña PBKDF2, cookie HttpOnly, controles de rol y propiedad, reserva atómica con índice único, reseñas solo tras atención, mensajes internos. No está conectado al frontend estático y no debe exponerse como API de producción.
-- CI Github Actions que comprueba sintaxis y ejecuta pruebas del servidor local.
+| Área | Funciones |
+|---|---|
+| Portada | Saludo, «Resumen buscaDR» con lo más urgente de cada persona, buscador con dictado por voz, fila de categorías con iconos, seguimiento de la reserva activa |
+| Búsqueda | Sugerencias, filtros rápidos (hoy, reserva inmediata, mejor valorados, precio, entrega), filtros completos, disponibilidad real por fechas, vistas Lista/Fotos/Mapa, ranking del Documento Maestro, «Pedir a la comunidad» |
+| Ficha y reserva | Disponibilidad de hoy, tarifas seleccionables, galería, reseñas reales; **reserva en 3 pasos** (Cuándo · Detalles · Confirmar) con **precio total antes de confirmar** (garantía aparte) |
+| Reservas | Solicitud con retención de 24 h o reserva inmediata, anti doble reserva atómica (con margen entre alquileres), código de entrega y de devolución, checklist y fotos de evidencia, extensión, cancelación, incidencias con mediación, cierre automático a las 48 h, reseñas en ambos sentidos, chat con ocultación de datos de contacto hasta confirmar |
+| Propietarios | Publicación guiada con **asistente IA desde la foto** (Claude, con alternativa por reglas), precios por hora/día/semana con sugerencia, bloqueos de calendario, panel de ingresos estimados, revisión previa del equipo buscaDR |
+| WhatsApp | Avisos con consentimiento, **aceptar/rechazar con un botón**, búsqueda por chat y **publicar enviando una foto** (WhatsApp Cloud API) |
+| Cuentas | Correo/contraseña (compatible con la v0.3), Google, preferencias, código de referido, exportación de datos |
+| Administración | `/admin`: KPIs del Documento Maestro (north star, GMV, take rate, contribución estimada, embudo, demanda), moderación, incidencias, reservas |
+| CMS Maestro | `/maestro` (solo el propietario): marca, **tipografías** (Brand Deck, Google Fonts o subidas), portada, banners, textos y menú, componentes, categorías con **iconos Font Awesome** y tonos, anuncios destacados, biblioteca de medios, SEO, permisos, reseñas, historial y **acceso y contraseña**, con vista previa en vivo y clic para editar |
+| SEO / PWA | SSR, landings `/alquiler/{ciudad}/{categoria}`, `sitemap.xml`, JSON-LD, PWA instalable |
 
-## Opción A: abrir el demo portable
+Los **anuncios de muestra** (11, etiquetados en toda la interfaz) permiten probar el flujo completo; sus reservas son de prueba y no ocupan el calendario de nadie. No se presentan como oferta real.
 
-Abre `public/index.html` con un navegador moderno. La mayor parte de la app funciona sin servidor; Google Fonts, Leaflet y mosaicos OpenStreetMap requieren internet. No uses información personal auténtica.
+## Stack
 
-## Opción B: servir frontend
-
-```bash
-python3 -m http.server 8080 --directory public
-```
-
-Visita `http://localhost:8080`.
-
-## Opción C: API local de desarrollo
-
-Node 22+ (SQLite experimental, solo para entorno local):
+Un único Cloudflare Worker (`buscadr`): API **Hono** en `server/` (`/api/*`) + web **React Router 8 con SSR** en `app/`, Tailwind 4, TypeScript estricto, D1 (`DB` → `buscadr-db`) con migraciones aditivas que se aplican solas, R2 opcional. Detalle en `docs/ARQUITECTURA.md`.
 
 ```bash
-DEMO_API=1 npm start
-npm run check
-npm test
+cp .dev.vars.example .dev.vars   # credenciales locales de prueba
+npm ci
+npm run dev                      # http://localhost:5173 (las migraciones se aplican en el primer request)
+npm test                         # 37 pruebas en workerd con D1 real
+npm run check                    # wrangler sincronizado + tipos + lint + pruebas + build
+BASE_URL=http://localhost:5173 npm run test:e2e     # prueba de humo en navegador (Playwright)
+BASE_URL=http://localhost:5173 npm run test:layout  # sin desbordes en 8 anchos de pantalla
 ```
 
-Windows PowerShell: `$env:DEMO_API="1"; npm start`. Endpoint: `http://127.0.0.1:8787/api/v1/health`. Persistencia en `.local/buscadr.sqlite`. No expongas esta API a Internet: faltan verificación de email, verificación documental, recuperación de acceso, MFA, auditoría completa y análisis de seguridad.
+## Documentación
 
-## Publicación de la demo estática en Cloudflare
-
-**Cloudflare Pages:** conecta el repositorio GitHub `elementedigital-wq/buscadr`, Framework preset `None`, Build command vacío, Build output directory `public`, rama `main`. Se publica solo la demo local, sin backend compartido.
-
-**Cloudflare Workers con static assets:** `wrangler.jsonc` prepara `public/`; cuando haya acceso autenticado a Cloudflare, ejecutar `npx wrangler deploy` después de probar versión y cuenta de Cloudflare. No anunciar URL hasta que el despliegue se confirme. Se incluye un workflow manual `.github/workflows/deploy-cloudflare.yml` que requiere guardar `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` como secretos del repositorio; no guardes las claves en código.
-
-## Arquitectura objetivo para producción (pendiente)
-
-Según el blueprint aprobado, la transición productiva será: **Next.js/React + TypeScript** para UI/SEO, **Hono** en Cloudflare Workers como API, **PostgreSQL/PostGIS** fuente de verdad de citas y geodatos, migraciones **Drizzle**, contratos **Zod**, controles de RBAC y tenant, WhatsApp Cloud API con consentimiento y outbox, colas con reintentos y pasarela local con webhooks verificados. La API SQLite incluida es únicamente un banco de pruebas funcional, **no reemplaza** PostgreSQL/PostGIS para el producto sanitario comercial.
-
-- Geolocalización inicial: Haversine y Leaflet. PostGIS `ST_DWithin` y GiST primero para escala; geohash/R-tree se utilizan solo si los perfiles lo justifican. A* / Dijkstra y Douglas–Peucker no son necesarios para localizar consultorios en el MVP, salvo que se añada navegación o rutas.
-- No incluir Java, PHP ni microservicios separados sin una necesidad concreta: añaden despliegues y riesgo sin mejorar el MVP. El monolito modular mantiene separación por dominio.
-- WhatsApp: usar cuenta Business de buscaDR, plantillas aprobadas y enlace seguro a chat interno; nunca revelar números privados ni simular envío en esta demo.
-- Seguridad y regulación: revisión LOPDP/SPDP Ecuador, comprobación ACESS u otras fuentes aplicables, MFA de staff, cifrado, accesibilidad, política de reseñas verificadas y consentimiento.
-- Pagos: **no implementados**; suscripciones, add-ons y clínicas tras validar costes y normativa.
-
-## Criterios pendientes antes de producción
-
-1. Conectar UX al backend definitivo: no confundir `localStorage` con autenticación real.
-2. Validar credenciales sanitarias oficialmente, controlar el acceso y minimizar datos sensibles.
-3. Reserva transaccional PostgreSQL con constraint `EXCLUDE` y prueba bajo 100 reservas simultáneas.
-4. Integraciones autorizadas de correo, WhatsApp, pasarela y persistencia segura multiusuario.
-5. SEO indexable con rutas de servidor (SPA de hash actual es solo demo).
-6. Pruebas E2E completas, compatibilidad Cloudflare, Lighthouse, pentesting y legal.
-
-## Carpeta principal
-
-`public/` UI portable; `server/` API local Node + SQLite; `tests/` pruebas de integración; `.github/` CI; `wrangler.jsonc` Cloudflare. No hay dependencias npm de runtime.
-
-**Derechos gráficos:** logotipo y elementos visuales tomados de los adjuntos aportados para este proyecto. Las imágenes y nombres de ejemplo no representan profesionales reales ni certifican habilitación profesional.
+- `docs/DESPLIEGUE.md` — Cloudflare, secretos y verificación.
+- `docs/ARQUITECTURA.md` — módulos, datos, reservas, ranking, seguridad.
+- `docs/CMS_MAESTRO.md` — uso y seguridad del CMS.
+- `docs/WHATSAPP.md` — configuración de Meta, plantillas y webhook.
+- `docs/AUTENTICACION_D1_GOOGLE.md` — cuentas, compatibilidad v0.3 y Google.
+- `docs/MONETIZACION.md` — comisiones, unidad económica y próximas fuentes de ingreso.
+- `docs/MARKETING_CLAIMS.md` — qué se puede y qué no se puede afirmar.
+- `docs/OPERACION_D1.md` — migraciones y recuperación.
+- `docs/CREDITOS.md` — licencias de iconos, fuentes y mapas.
+- `docs/adr/` — decisiones técnicas.

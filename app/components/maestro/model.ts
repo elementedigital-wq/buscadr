@@ -9,8 +9,8 @@ export type TabId =
   | "banners"
   | "textos"
   | "componentes"
-  | "categorias"
-  | "anuncios"
+  | "especialidades"
+  | "profesionales"
   | "biblioteca"
   | "seo"
   | "permisos"
@@ -20,17 +20,17 @@ export type TabId =
 
 export const TABS: { id: TabId; label: string; icon: string; group: "Contenido" | "Operación" }[] = [
   { id: "resumen", label: "Resumen", icon: "home", group: "Contenido" },
-  { id: "marca", label: "Marca y estilo", icon: "star", group: "Contenido" },
+  { id: "marca", label: "Marca, fuentes e íconos", icon: "palette", group: "Contenido" },
   { id: "portada", label: "Portada", icon: "home", group: "Contenido" },
   { id: "banners", label: "Banners", icon: "list", group: "Contenido" },
-  { id: "textos", label: "Textos y menú", icon: "quote", group: "Contenido" },
+  { id: "textos", label: "Textos y botones", icon: "font", group: "Contenido" },
   { id: "componentes", label: "Componentes", icon: "chart", group: "Contenido" },
-  { id: "categorias", label: "Categorías", icon: "list", group: "Contenido" },
-  { id: "anuncios", label: "Anuncios", icon: "tag", group: "Contenido" },
+  { id: "especialidades", label: "Especialidades e íconos", icon: "stethoscope", group: "Contenido" },
+  { id: "profesionales", label: "Profesionales", icon: "user-doctor", group: "Contenido" },
   { id: "biblioteca", label: "Biblioteca de medios", icon: "regular:images", group: "Contenido" },
   { id: "seo", label: "SEO y redes", icon: "search", group: "Contenido" },
   { id: "permisos", label: "Permisos", icon: "shield", group: "Operación" },
-  { id: "resenas", label: "Reseñas", icon: "star", group: "Operación" },
+  { id: "resenas", label: "Opiniones", icon: "star", group: "Operación" },
   { id: "historial", label: "Publicaciones", icon: "repeat", group: "Operación" },
   { id: "acceso", label: "Acceso y contraseña", icon: "lock", group: "Operación" },
 ];
@@ -43,8 +43,8 @@ export function tabForPath(path: string): TabId {
   if (root === "banners") return "banners";
   if (root === "copy" || root === "navigation" || root === "buttons") return "textos";
   if (root === "layout") return "componentes";
-  if (root === "categories") return "categorias";
-  if (root === "listings") return "anuncios";
+  if (root === "specialties") return "especialidades";
+  if (root === "practitioners") return "profesionales";
   if (root === "seo") return "seo";
   return "resumen";
 }
@@ -63,9 +63,9 @@ export function setPath<T>(obj: T, path: string, value: unknown): T {
   return base;
 }
 
-/** Afirmaciones que docs/MARKETING_CLAIMS.md prohíbe en piezas públicas del piloto (Documento Maestro §03). */
+/** Afirmaciones que docs/MARKETING_CLAIMS.md prohíbe en piezas públicas (salud: nada de promesas clínicas ni urgencias). */
 const CLAIMS =
-  /(verificad[oa]s?|certificad[oa]s?|garantizad[oa]s?|garant[ií]a total|asegurad[oa]s?|100 ?%|24\/7|siempre estamos|pagos? (?:seguros?|protegidos?)|en minutos|al instante|disponible al instante|tiempo real|app store|google play|desc[aá]rgala|miles de (?:herramientas|equipos)|sin riesgo)/i;
+  /(garantizad[oa]s?|garant[ií]a total|100 ?%|24\/7|cura(?:mos|r)? |sin riesgo|el mejor m[eé]dico|los mejores m[eé]dicos|diagn[oó]stico (?:en l[ií]nea|inmediato)|atendemos emergencias|urgencias las 24|resultados asegurados|app store|google play|desc[aá]rgala|miles de (?:m[eé]dicos|doctores|especialistas))/i;
 
 export type Warning = { path: string; text: string };
 
@@ -81,18 +81,18 @@ function walkStrings(value: unknown, path: string, out: Warning[]) {
 /** Avisos de cumplimiento y accesibilidad (no bloquean, pero se muestran antes de publicar). */
 export function contentWarnings(cms: Cms): Warning[] {
   const out: Warning[] = [];
-  const { listings: _l, categories: _c, theme: _t, trust: _tr, ...texts } = cms;
+  const { practitioners: _p, specialties: _s, theme: _t, trust: _tr, ...texts } = cms;
   walkStrings(texts, "", out);
-  for (const c of cms.categories) walkStrings(c.name, `categories.${c.slug}`, out);
-  for (const [id, p] of Object.entries(cms.listings)) walkStrings(p.headline, `listings.${id}`, out);
+  for (const sp of cms.specialties) walkStrings(sp.name, `specialties.${sp.slug}`, out);
+  for (const [slug, p] of Object.entries(cms.practitioners)) walkStrings(p.headline, `practitioners.${slug}`, out);
   const t = cms.theme;
   const checks: [string, string, string, string][] = [
-    ["theme.primary", t.primary, t.surface, "Morado (enlaces y precios) sobre tarjetas"],
-    ["theme.primary", "#FFFFFF", t.primary, "Texto blanco sobre el morado (botones principales)"],
+    ["theme.primary", t.primary, t.surface, "Azul Confianza (enlaces y precios) sobre tarjetas"],
+    ["theme.primary", "#FFFFFF", t.primary, "Texto blanco sobre el azul (botones principales)"],
     ["theme.text", t.text, t.background, "Texto sobre el fondo general"],
     ["theme.text", t.text, t.surface, "Texto sobre tarjetas"],
-    ["theme.secondary", t.text, t.secondary, "Texto sobre el turquesa (botones secundarios)"],
-    ["theme.neutral", t.neutral === "#6D6E71" ? "#5E5F63" : t.neutral, t.surface, "Gris de textos secundarios sobre tarjetas"],
+    ["theme.secondary", t.text, t.secondary, "Texto oscuro sobre el Verde Salud (insignias y acentos)"],
+    ["theme.neutral", t.neutral, t.surface, "Gris de textos secundarios sobre tarjetas"],
   ];
   for (const [path, fg, bg, label] of checks) {
     const ratio = contrast(fg, bg);
@@ -103,11 +103,14 @@ export function contentWarnings(cms: Cms): Warning[] {
 
 export const ROUTE_LABELS: Record<string, string> = {
   inicio: "Inicio",
-  explorar: "Explorar (con categoría opcional)",
-  publicar: "Publicar un equipo",
-  reservas: "Reservas",
-  cuenta: "Cuenta",
+  buscar: "Buscar (con especialidad opcional)",
+  especialidades: "Especialidades",
+  citas: "Mis citas",
+  panel: "Panel del profesional",
+  planes: "Planes",
+  "para-profesionales": "Para profesionales",
   "como-funciona": "Cómo funciona",
+  cuenta: "Cuenta",
 };
 
 /** Imágenes de marca incluidas en el sitio (Brand Deck), disponibles sin subir nada. */
@@ -115,39 +118,22 @@ export const BRAND_ASSETS = [
   "/assets/buscadr-logo.png",
   "/assets/buscadr-logo-blanco.png",
   "/assets/buscadr-isotipo.png",
-  "/assets/fotos/hero.webp",
-  "/assets/fotos/propietario.webp",
-  "/assets/fotos/carpintero.webp",
-  "/assets/fotos/constructor.webp",
-  "/assets/fotos/proyecto.webp",
-  "/assets/fotos/comunidad.webp",
-  "/assets/fotos/jardin.webp",
-  "/assets/fotos/taladro.webp",
-  "/assets/fotos/hidrolavadora.webp",
-  "/assets/fotos/energia.webp",
-  "/assets/fotos/generador.webp",
-  "/assets/fotos/sonido.webp",
-  "/assets/fotos/proyector.webp",
-  "/assets/fotos/camara.webp",
-  "/assets/fotos/laptop.webp",
-  "/assets/fotos/cortasetos.webp",
-  "/assets/fotos/automotriz.webp",
-  "/assets/fotos/caja-herramientas.webp",
-  "/assets/fotos/lavadora.webp",
-  "/assets/iconos/taladro.webp",
-  "/assets/iconos/sierra.webp",
-  "/assets/iconos/escalera.webp",
-  "/assets/iconos/pintura.webp",
-  "/assets/iconos/construccion.webp",
-  "/assets/iconos/hogar.webp",
-  "/assets/iconos/jardin.webp",
-  "/assets/iconos/eventos.webp",
-  "/assets/iconos/audio.webp",
-  "/assets/iconos/tecnologia.webp",
-  "/assets/iconos/energia.webp",
-  "/assets/iconos/limpieza.webp",
-  "/assets/iconos/automotriz.webp",
-  "/assets/iconos/plomeria.svg",
-  "/assets/iconos/ubicacion.webp",
-  "/assets/iconos/reserva.webp",
+  "/assets/hero-doctor.webp",
+  "/assets/concept-ui.webp",
+  "/assets/fotos/clinica.webp",
+  "/assets/fotos/paciente.webp",
+  "/assets/fotos/profesional.webp",
+  "/assets/fotos/consulta.webp",
+  ...[
+    "ana-torres",
+    "carlos-mendez",
+    "valeria-ruiz",
+    "andres-salazar",
+    "andres-morales",
+    "isabel-vega",
+    "gabriela-leon",
+    "fernando-soto",
+    "daniel-rivas",
+    "paula-mora",
+  ].map((n) => `/assets/medicos/${n}.webp`),
 ];

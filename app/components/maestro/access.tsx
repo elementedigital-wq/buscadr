@@ -27,7 +27,7 @@ export function StrengthMeter({ value }: { value: string }) {
     <div className="mt-1.5" aria-live="polite">
       <div className="flex gap-1" aria-hidden>
         {[1, 2, 3, 4, 5].map((i) => (
-          <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= s ? (s <= 2 ? "bg-alerta" : s === 3 ? "bg-azul" : "bg-turquesa") : "bg-gris-claro"}`} />
+          <span key={i} className={`h-1.5 flex-1 rounded-full ${i <= s ? (s <= 2 ? "bg-alerta" : s === 3 ? "bg-azul" : "bg-verde") : "bg-gris-claro"}`} />
         ))}
       </div>
       <p className="mt-1 text-xs muted">
@@ -62,9 +62,12 @@ export function Acceso({ email, recoveryEmail, notify }: { email: string; recove
   }
   return (
     <div className="space-y-5">
-      <Section title="Cuenta del propietario" description="Solo esta cuenta ve y puede abrir el CMS Maestro y la administración. Ninguna otra cuenta tiene el acceso.">
+      <Section
+        title="Cuenta del propietario"
+        description="Solo esta cuenta ve y puede abrir el CMS Maestro y la administración. Ninguna otra cuenta tiene el acceso."
+      >
         <p className="flex flex-wrap items-center gap-2 text-sm">
-          <Icon name="regular:envelope" className="size-4 text-morado" />
+          <Icon name="regular:envelope" className="size-4 text-azul" />
           <strong className="break-all">{email}</strong>
         </p>
         <div className="mt-3">

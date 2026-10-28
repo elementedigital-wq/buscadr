@@ -3,40 +3,68 @@ import { Link } from "react-router";
 import { initials } from "../lib/format";
 import { Icon } from "./Icon";
 
-export function Avatar({ name, photo, size = 48 }: { name: string; photo?: string | null; size?: number }) {
+export function Avatar({ name, photo, size = 48, rounded = "full" }: { name: string; photo?: string | null; size?: number; rounded?: "full" | "xl" }) {
   const style = { width: size, height: size };
+  const shape = rounded === "full" ? "rounded-full" : "rounded-2xl";
   if (photo)
-    return <img src={photo} alt="" style={style} className="shrink-0 rounded-full object-cover ring-2 ring-white" loading="lazy" width={size} height={size} />;
+    return (
+      <img
+        src={photo}
+        alt=""
+        style={style}
+        className={`shrink-0 ${shape} bg-celeste object-cover ring-2 ring-white`}
+        loading="lazy"
+        width={size}
+        height={size}
+      />
+    );
   return (
     <span
       aria-hidden
-      style={style}
-      className="grid shrink-0 place-items-center rounded-full bg-lila font-display text-base font-bold text-morado ring-2 ring-white"
+      style={{ ...style, fontSize: Math.max(12, size / 2.8) }}
+      className={`grid shrink-0 place-items-center ${shape} bg-celeste font-display font-bold text-azul ring-2 ring-white`}
     >
-      {initials(name)}
+      {initials(name.replace(/^(Dra?\.|Lic\.|Psic\.|Od\.|Nut\.|Ft\.)\s+/i, ""))}
     </span>
   );
 }
 
-export function PageHeader({ eyebrow, title, children, back }: { eyebrow?: string; title: string; children?: ReactNode; back?: string }) {
+export function PageHeader({
+  eyebrow,
+  title,
+  children,
+  back,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  children?: ReactNode;
+  back?: string;
+  actions?: ReactNode;
+}) {
   return (
-    <header className="mb-6 pt-6 sm:pt-10">
-      {back && (
-        <Link to={back} className="mb-3 inline-flex items-center gap-1 text-sm font-semibold text-morado">
-          <Icon name="back" className="size-4" /> Volver
-        </Link>
-      )}
-      {eyebrow && <p className="label-eyebrow">{eyebrow}</p>}
-      <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">{title}</h1>
-      {children && <div className="mt-2 max-w-2xl text-base muted">{children}</div>}
+    <header className="mb-6 flex flex-wrap items-end justify-between gap-4 pt-6 sm:pt-10">
+      <div className="min-w-0">
+        {back && (
+          <Link to={back} className="mb-3 inline-flex min-h-10 items-center gap-1.5 text-sm font-semibold text-azul">
+            <Icon name="back" className="size-4" /> Volver
+          </Link>
+        )}
+        {eyebrow && <p className="label-eyebrow">{eyebrow}</p>}
+        <h1 className="mt-1 text-3xl font-extrabold sm:text-4xl">{title}</h1>
+        {children && <div className="mt-2 max-w-2xl text-base muted">{children}</div>}
+      </div>
+      {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
     </header>
   );
 }
 
-export function EmptyState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
+export function EmptyState({ title, children, action, icon = "stethoscope" }: { title: string; children?: ReactNode; action?: ReactNode; icon?: string }) {
   return (
     <div className="card flex flex-col items-center gap-3 px-6 py-10 text-center">
-      <img src="/assets/buscadr-isotipo.png" alt="" className="size-11 opacity-90" width={44} height={44} />
+      <span className="grid size-14 place-items-center rounded-2xl tone-azul">
+        <Icon name={icon} className="size-6" />
+      </span>
       <h2 className="text-lg font-bold">{title}</h2>
       {children && <div className="max-w-md text-sm muted">{children}</div>}
       {action}
@@ -46,18 +74,18 @@ export function EmptyState({ title, children, action }: { title: string; childre
 
 export function Notice({ tone = "info", title, children }: { tone?: "info" | "warning" | "success" | "danger"; title?: string; children: ReactNode }) {
   const tones = {
-    info: "bg-lila/70 ring-morado/15",
-    warning: "bg-[#fff6dc] ring-[#e8c766]",
-    success: "bg-turquesa/10 ring-turquesa/40",
+    info: "bg-celeste/70 ring-azul/15",
+    warning: "bg-[#fef9c3] ring-amarillo/70",
+    success: "bg-menta/70 ring-verde/40",
     danger: "bg-alerta/5 ring-alerta/30",
   } as const;
   return (
     <div role={tone === "danger" ? "alert" : "status"} className={`flex gap-3 rounded-2xl p-4 text-sm ring-1 ${tones[tone]}`}>
       <Icon
-        name={tone === "danger" ? "alert" : tone === "success" ? "check" : "info"}
-        className={`mt-0.5 size-5 shrink-0 ${tone === "danger" ? "text-alerta" : "text-morado"}`}
+        name={tone === "danger" ? "alert" : tone === "success" ? "check-circle" : "info"}
+        className={`mt-0.5 size-5 shrink-0 ${tone === "danger" ? "text-alerta-ink" : tone === "success" ? "text-verde-ink" : "text-azul"}`}
       />
-      <div>
+      <div className="min-w-0">
         {title && <p className="font-semibold">{title}</p>}
         <div className="text-tinta/90">{children}</div>
       </div>
@@ -66,25 +94,30 @@ export function Notice({ tone = "info", title, children }: { tone?: "info" | "wa
 }
 
 const STATUS_TONE: Record<string, string> = {
-  solicitada: "bg-[#fff6dc] text-tinta",
-  confirmada: "bg-turquesa/15 text-tinta",
-  en_curso: "bg-morado text-white",
-  devuelta: "bg-lila text-morado",
-  completada: "bg-morado/10 text-morado",
+  solicitada: "bg-[#fef9c3] text-tinta",
+  confirmada: "bg-menta text-[#065f46]",
+  completada: "bg-celeste text-azul",
   cancelada: "bg-gris-claro text-gris",
   rechazada: "bg-gris-claro text-gris",
   expirada: "bg-gris-claro text-gris",
-  incidencia: "bg-alerta/10 text-alerta",
-  active: "bg-turquesa/15 text-tinta",
-  review: "bg-[#fff6dc] text-tinta",
+  no_asistio: "bg-alerta/10 text-alerta-ink",
+  pendiente: "bg-[#fef9c3] text-tinta",
+  pagado: "bg-menta text-[#065f46]",
+  aprobado: "bg-menta text-[#065f46]",
+  rechazado: "bg-alerta/10 text-alerta-ink",
+  reembolsado: "bg-celeste text-azul",
+  cancelado: "bg-gris-claro text-gris",
+  creado: "bg-gris-claro text-tinta",
+  active: "bg-menta text-[#065f46]",
+  review: "bg-[#fef9c3] text-tinta",
   draft: "bg-gris-claro text-tinta",
   paused: "bg-gris-claro text-gris",
-  rejected: "bg-alerta/10 text-alerta",
+  rejected: "bg-alerta/10 text-alerta-ink",
 };
 
-export const LISTING_STATUS: Record<string, string> = {
+export const PROFILE_STATUS: Record<string, string> = {
   active: "Publicado",
-  review: "En revisión",
+  review: "En verificación",
   draft: "Borrador",
   paused: "Pausado",
   rejected: "Requiere cambios",
@@ -94,14 +127,14 @@ export function StatusBadge({ status, label }: { status: string; label: string }
   return <span className={`chip px-2.5 py-0.5 text-xs font-semibold ${STATUS_TONE[status] ?? "bg-gris-claro"}`}>{label}</span>;
 }
 
-export function Stars({ value, className = "" }: { value: number; className?: string }) {
+export function Stars({ value, className = "", size = "size-4" }: { value: number; className?: string; size?: string }) {
   return (
     <span role="img" className={`inline-flex items-center gap-0.5 ${className}`} aria-label={`${value.toFixed(1)} de 5`}>
       {[1, 2, 3, 4, 5].map((i) => (
         <svg
           key={i}
           viewBox="0 0 24 24"
-          className={`size-4 ${i <= Math.round(value) ? "fill-[#f5b301] stroke-[#c98f00]" : "fill-gris-claro stroke-gris-claro"}`}
+          className={`${size} ${i <= Math.round(value) ? "fill-[#f5b301] stroke-[#c98f00]" : "fill-gris-claro stroke-gris-claro"}`}
           aria-hidden
         >
           <path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
@@ -115,9 +148,18 @@ export function Spinner({ label = "Cargando" }: { label?: string }) {
   return <span role="status" aria-label={label} className="inline-block size-5 animate-spin rounded-full border-2 border-current border-r-transparent" />;
 }
 
-/** Rótulo obligatorio de los anuncios de muestra (no se puede ocultar desde el CMS). */
+/** Rótulo obligatorio de los perfiles de muestra (no se puede ocultar desde el CMS). */
 export function DemoBadge({ className = "" }: { className?: string }) {
-  return <span className={`chip bg-[#fff6dc] px-2.5 py-0.5 text-xs font-semibold text-tinta ring-1 ring-[#e8c766] ${className}`}>Anuncio de muestra</span>;
+  return <span className={`chip bg-[#fef9c3] px-2.5 py-0.5 text-xs font-semibold text-tinta ring-1 ring-amarillo ${className}`}>Perfil de muestra</span>;
+}
+
+/** Sello de verificación manual de credenciales (nunca en perfiles de muestra). */
+export function VerifiedBadge({ className = "" }: { className?: string }) {
+  return (
+    <span className={`chip bg-menta px-2.5 py-0.5 text-xs font-semibold text-[#065f46] ${className}`} title="Credenciales revisadas por buscaDR">
+      <Icon name="circle-check" className="size-3.5" /> Verificado
+    </span>
+  );
 }
 
 /** Contraseña con botón «Mostrar/Ocultar» (no sale del campo: relleno derecho reservado). */
@@ -154,10 +196,41 @@ export function PasswordInput({
         onClick={() => setShow((v) => !v)}
         aria-pressed={show}
         aria-label={show ? "Ocultar contraseña" : "Mostrar contraseña"}
-        className="absolute top-1/2 right-1.5 min-h-9 -translate-y-1/2 rounded-full px-3 text-sm font-semibold text-morado hover:bg-morado/5"
+        className="absolute top-1/2 right-1.5 min-h-9 -translate-y-1/2 rounded-full px-3 text-sm font-semibold text-azul hover:bg-azul/5"
       >
         {show ? "Ocultar" : "Mostrar"}
       </button>
+    </div>
+  );
+}
+
+export const TONE_CLASS = { azul: "tone-azul", verde: "tone-verde", cielo: "tone-cielo", neutro: "tone-neutro" } as const;
+export const TONE_CARD = { azul: "tone-card-azul", verde: "tone-card-verde", cielo: "tone-card-cielo", neutro: "tone-card-neutro" } as const;
+
+/** Tarjeta de indicador (KPI) del panel. */
+export function Stat({
+  icon,
+  label,
+  value,
+  hint,
+  tone = "azul",
+}: {
+  icon: string;
+  label: string;
+  value: ReactNode;
+  hint?: ReactNode;
+  tone?: "azul" | "verde" | "cielo" | "neutro";
+}) {
+  return (
+    <div className="card flex min-w-0 items-center gap-3 p-4">
+      <span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${TONE_CLASS[tone]}`}>
+        <Icon name={icon} className="size-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-sm muted">{label}</p>
+        <p className="font-display text-2xl font-extrabold leading-tight">{value}</p>
+        {hint && <p className="truncate text-xs muted">{hint}</p>}
+      </div>
     </div>
   );
 }

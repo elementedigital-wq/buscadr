@@ -75,9 +75,8 @@ export async function admin() {
 }
 
 /** PNG 1×1 válido (firma real) para subir fotos. */
-export const PNG = Uint8Array.from(
-  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="),
-  (c) => c.charCodeAt(0),
+export const PNG = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="), (c) =>
+  c.charCodeAt(0),
 );
 
 /** Profesional con perfil completo, verificado y publicado por la administración. */

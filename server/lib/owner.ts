@@ -1,5 +1,5 @@
 /**
- * Propietario del CMS Maestro (una sola cuenta, ADR 0003).
+ * Propietario del CMS Maestro (una sola cuenta, ADR 0008).
  *
  * - Correo: `elemente.digital@gmail.com`, fijo en el código en producción. Solo con
  *   BUSCADR_ENV=test|development puede sustituirse con `BUSCADR_ADMIN_EMAIL` (pruebas y local).
@@ -27,7 +27,8 @@ export function ownerEmail(env: Env) {
 
 export const isOwnerEmail = (env: Env, email: unknown) => typeof email === "string" && email.trim().toLowerCase() === ownerEmail(env);
 
-const secretPassword = (env: Env) => (typeof env.BUSCADR_ADMIN_PASSWORD === "string" && env.BUSCADR_ADMIN_PASSWORD.length >= OWNER_MIN_PASSWORD ? env.BUSCADR_ADMIN_PASSWORD : null);
+const secretPassword = (env: Env) =>
+  typeof env.BUSCADR_ADMIN_PASSWORD === "string" && env.BUSCADR_ADMIN_PASSWORD.length >= OWNER_MIN_PASSWORD ? env.BUSCADR_ADMIN_PASSWORD : null;
 
 const hasOwnHash = (u: User | null) => !!u && u.staff_role === "admin" && !!u.password_hash?.startsWith("pbkdf2-sha256:");
 

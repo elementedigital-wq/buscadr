@@ -20,22 +20,150 @@ export type Specialty = {
 };
 
 export const SPECIALTIES: Specialty[] = [
-  { slug: "medicina-general", name: "Medicina general", professional: "Médico general", icon: "stethoscope", tone: "azul", enabled: true, keywords: ["medico", "general", "familiar", "chequeo", "consulta", "fiebre", "gripe", "doctor"] },
-  { slug: "pediatria", name: "Pediatría", professional: "Pediatra", icon: "baby", tone: "verde", enabled: true, keywords: ["pediatra", "nino", "nina", "bebe", "infantil", "vacuna", "hijo"] },
-  { slug: "ginecologia", name: "Ginecología", professional: "Ginecólogo/a", icon: "person-pregnant", tone: "cielo", enabled: true, keywords: ["ginecologo", "ginecologa", "embarazo", "obstetricia", "mujer", "control prenatal"] },
-  { slug: "dermatologia", name: "Dermatología", professional: "Dermatólogo/a", icon: "hand-dots", tone: "verde", enabled: true, keywords: ["dermatologo", "piel", "acne", "lunares", "manchas", "cabello"] },
-  { slug: "odontologia", name: "Odontología", professional: "Odontólogo/a", icon: "tooth", tone: "azul", enabled: true, keywords: ["odontologo", "dentista", "dientes", "muela", "limpieza dental", "ortodoncia", "brackets"] },
-  { slug: "psicologia", name: "Psicología", professional: "Psicólogo/a", icon: "brain", tone: "cielo", enabled: true, keywords: ["psicologo", "psicologa", "terapia", "ansiedad", "estres", "pareja", "emocional"] },
-  { slug: "nutricion", name: "Nutrición", professional: "Nutricionista", icon: "apple-whole", tone: "verde", enabled: true, keywords: ["nutricionista", "dieta", "peso", "alimentacion", "obesidad", "nutriologo"] },
-  { slug: "fisioterapia", name: "Fisioterapia", professional: "Fisioterapeuta", icon: "person-walking", tone: "azul", enabled: true, keywords: ["fisioterapeuta", "rehabilitacion", "lesion", "espalda", "terapia fisica", "dolor"] },
-  { slug: "cardiologia", name: "Cardiología", professional: "Cardiólogo/a", icon: "heart-pulse", tone: "azul", enabled: true, keywords: ["cardiologo", "corazon", "presion", "hipertension", "electrocardiograma", "arritmia"] },
-  { slug: "traumatologia", name: "Traumatología", professional: "Traumatólogo/a", icon: "bone", tone: "neutro", enabled: true, keywords: ["traumatologo", "huesos", "rodilla", "fractura", "ortopedia", "columna"] },
-  { slug: "oftalmologia", name: "Oftalmología", professional: "Oftalmólogo/a", icon: "eye", tone: "cielo", enabled: true, keywords: ["oftalmologo", "ojos", "vista", "lentes", "vision"] },
-  { slug: "otorrinolaringologia", name: "Otorrinolaringología", professional: "Otorrino", icon: "ear-listen", tone: "neutro", enabled: false, keywords: ["otorrino", "oido", "nariz", "garganta", "sinusitis"] },
-  { slug: "endocrinologia", name: "Endocrinología", professional: "Endocrinólogo/a", icon: "vial", tone: "verde", enabled: false, keywords: ["endocrinologo", "tiroides", "diabetes", "hormonas"] },
-  { slug: "neurologia", name: "Neurología", professional: "Neurólogo/a", icon: "head-side-virus", tone: "azul", enabled: false, keywords: ["neurologo", "migrana", "cabeza", "nervios", "convulsiones"] },
-  { slug: "psiquiatria", name: "Psiquiatría", professional: "Psiquiatra", icon: "comment-medical", tone: "cielo", enabled: false, keywords: ["psiquiatra", "depresion", "medicacion", "salud mental"] },
-  { slug: "laboratorio", name: "Laboratorio clínico", professional: "Laboratorio", icon: "microscope", tone: "neutro", enabled: false, keywords: ["laboratorio", "examenes", "sangre", "analisis"] },
+  {
+    slug: "medicina-general",
+    name: "Medicina general",
+    professional: "Médico general",
+    icon: "stethoscope",
+    tone: "azul",
+    enabled: true,
+    keywords: ["medico", "general", "familiar", "chequeo", "consulta", "fiebre", "gripe", "doctor"],
+  },
+  {
+    slug: "pediatria",
+    name: "Pediatría",
+    professional: "Pediatra",
+    icon: "baby",
+    tone: "verde",
+    enabled: true,
+    keywords: ["pediatra", "nino", "nina", "bebe", "infantil", "vacuna", "hijo"],
+  },
+  {
+    slug: "ginecologia",
+    name: "Ginecología",
+    professional: "Ginecólogo/a",
+    icon: "person-pregnant",
+    tone: "cielo",
+    enabled: true,
+    keywords: ["ginecologo", "ginecologa", "embarazo", "obstetricia", "mujer", "control prenatal"],
+  },
+  {
+    slug: "dermatologia",
+    name: "Dermatología",
+    professional: "Dermatólogo/a",
+    icon: "hand-dots",
+    tone: "verde",
+    enabled: true,
+    keywords: ["dermatologo", "piel", "acne", "lunares", "manchas", "cabello"],
+  },
+  {
+    slug: "odontologia",
+    name: "Odontología",
+    professional: "Odontólogo/a",
+    icon: "tooth",
+    tone: "azul",
+    enabled: true,
+    keywords: ["odontologo", "dentista", "dientes", "muela", "limpieza dental", "ortodoncia", "brackets"],
+  },
+  {
+    slug: "psicologia",
+    name: "Psicología",
+    professional: "Psicólogo/a",
+    icon: "brain",
+    tone: "cielo",
+    enabled: true,
+    keywords: ["psicologo", "psicologa", "terapia", "ansiedad", "estres", "pareja", "emocional"],
+  },
+  {
+    slug: "nutricion",
+    name: "Nutrición",
+    professional: "Nutricionista",
+    icon: "apple-whole",
+    tone: "verde",
+    enabled: true,
+    keywords: ["nutricionista", "dieta", "peso", "alimentacion", "obesidad", "nutriologo"],
+  },
+  {
+    slug: "fisioterapia",
+    name: "Fisioterapia",
+    professional: "Fisioterapeuta",
+    icon: "person-walking",
+    tone: "azul",
+    enabled: true,
+    keywords: ["fisioterapeuta", "rehabilitacion", "lesion", "espalda", "terapia fisica", "dolor"],
+  },
+  {
+    slug: "cardiologia",
+    name: "Cardiología",
+    professional: "Cardiólogo/a",
+    icon: "heart-pulse",
+    tone: "azul",
+    enabled: true,
+    keywords: ["cardiologo", "corazon", "presion", "hipertension", "electrocardiograma", "arritmia"],
+  },
+  {
+    slug: "traumatologia",
+    name: "Traumatología",
+    professional: "Traumatólogo/a",
+    icon: "bone",
+    tone: "neutro",
+    enabled: true,
+    keywords: ["traumatologo", "huesos", "rodilla", "fractura", "ortopedia", "columna"],
+  },
+  {
+    slug: "oftalmologia",
+    name: "Oftalmología",
+    professional: "Oftalmólogo/a",
+    icon: "eye",
+    tone: "cielo",
+    enabled: true,
+    keywords: ["oftalmologo", "ojos", "vista", "lentes", "vision"],
+  },
+  {
+    slug: "otorrinolaringologia",
+    name: "Otorrinolaringología",
+    professional: "Otorrino",
+    icon: "ear-listen",
+    tone: "neutro",
+    enabled: false,
+    keywords: ["otorrino", "oido", "nariz", "garganta", "sinusitis"],
+  },
+  {
+    slug: "endocrinologia",
+    name: "Endocrinología",
+    professional: "Endocrinólogo/a",
+    icon: "vial",
+    tone: "verde",
+    enabled: false,
+    keywords: ["endocrinologo", "tiroides", "diabetes", "hormonas"],
+  },
+  {
+    slug: "neurologia",
+    name: "Neurología",
+    professional: "Neurólogo/a",
+    icon: "head-side-virus",
+    tone: "azul",
+    enabled: false,
+    keywords: ["neurologo", "migrana", "cabeza", "nervios", "convulsiones"],
+  },
+  {
+    slug: "psiquiatria",
+    name: "Psiquiatría",
+    professional: "Psiquiatra",
+    icon: "comment-medical",
+    tone: "cielo",
+    enabled: false,
+    keywords: ["psiquiatra", "depresion", "medicacion", "salud mental"],
+  },
+  {
+    slug: "laboratorio",
+    name: "Laboratorio clínico",
+    professional: "Laboratorio",
+    icon: "microscope",
+    tone: "neutro",
+    enabled: false,
+    keywords: ["laboratorio", "examenes", "sangre", "analisis"],
+  },
 ];
 
 export const SPECIALTY_MAP = new Map(SPECIALTIES.map((s) => [s.slug, s]));
@@ -72,12 +200,7 @@ export const cityByName = (name: string | null | undefined) => CITIES.find((c) =
 export const cityBySlug = (slug: string | null | undefined) => CITIES.find((c) => c.slug === slug) ?? null;
 
 /** Normaliza texto para búsqueda: minúsculas y sin tildes. */
-export const normalizeText = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim();
+export const normalizeText = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
 /** Sugiere especialidad a partir de un texto libre («me duele la muela» → odontología). */
 export function guessSpecialty(text: string): string | null {

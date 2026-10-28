@@ -1,6 +1,7 @@
 /**
- * Prueba de humo en un navegador real (Playwright): registro → reserva de prueba en 3 pasos sobre
- * un anuncio de muestra → detalle con código → CMS protegido.
+ * Prueba de humo en un navegador real (Playwright): búsqueda → registro de paciente → cita
+ * presencial con un perfil de muestra (calendario, horario, motivo) → detalle de la cita →
+ * CMS protegido para cuentas que no son la del propietario.
  *
  *   BASE_URL=http://127.0.0.1:5173 npm run test:e2e
  *
@@ -24,33 +25,33 @@ try {
   await page.getByRole("heading", { level: 1 }).waitFor();
   step("portada");
 
-  await page.goto(`${base}/explorar?q=taladro`);
-  await page.getByText(/equipos? disponibles?/).first().waitFor();
+  await page.goto(`${base}/buscar?q=pediatra`);
+  await page.getByText(/profesional(es)? ·/).first().waitFor();
   step("búsqueda");
 
-  await page.goto(`${base}/cuenta?tab=registro&next=/equipo/1`);
+  await page.goto(`${base}/cuenta?tab=registro&next=/doctor/dr-andres-salazar`);
   await page.getByLabel("Nombre y apellido").fill("Prueba E2E");
   await page.getByLabel("Correo electrónico").fill(`e2e-${Date.now()}@test.ec`);
   await page.getByLabel(/^Contraseña/).fill("contrasena-e2e-123");
-  await page.getByRole("checkbox", { name: /condiciones del piloto/i }).check();
+  await page.getByRole("checkbox", { name: /términos y la política de privacidad/i }).check();
   await page.getByRole("button", { name: /Crear mi cuenta/ }).click();
-  await page.waitForURL(/\/equipo\//);
-  step("registro");
+  await page.waitForURL(/\/doctor\//);
+  step("registro de paciente");
 
-  // Reserva en 3 pasos: Cuándo → Detalles → Confirmar.
-  await page.getByRole("link", { name: /Reservar ahora|Solicitar reserva/ }).first().click();
-  await page.waitForURL(/\/reservar/);
-  await page.getByRole("radio", { name: "1 día" }).click();
-  await page.getByRole("button", { name: /Continuar/ }).click();
-  await page.getByRole("heading", { name: "Detalles" }).waitFor();
-  const rules = page.getByRole("checkbox", { name: /reglas de uso/ });
-  if (await rules.count()) await rules.check();
-  await page.getByRole("button", { name: /Continuar/ }).click();
-  await page.getByRole("heading", { name: "Revisa y confirma" }).waitFor();
-  await page.getByRole("button", { name: /Reservar ·|Enviar solicitud ·/ }).click();
-  await page.waitForURL(/\/reservas\/\d+/);
-  await page.getByText(/\b\d{6}\b/).first().waitFor();
-  step("reserva de prueba con código");
+  // Calendario: modalidad presencial → primer día con horarios → primer horario → confirmar.
+  await page.getByRole("radio", { name: /Presencial/ }).first().click();
+  const slot = page.locator("[data-slot]").first();
+  for (let i = 0; i < 7 && !(await slot.count()); i++) {
+    const days = page.locator("[data-day]:not([disabled])");
+    if (await days.nth(i).count()) await days.nth(i).click();
+    await page.waitForTimeout(300);
+  }
+  await slot.click();
+  await page.getByLabel(/Motivo/).fill("Control general");
+  await page.getByRole("button", { name: /Agendar/ }).last().click();
+  await page.waitForURL(/\/citas\/\d+/);
+  await page.getByText(/Confirmada|Solicitada/).first().waitFor();
+  step("cita presencial reservada");
 
   await page.goto(`${base}/maestro`);
   await page.getByText("no tiene acceso al CMS").waitFor();

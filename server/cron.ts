@@ -25,11 +25,12 @@ export async function scheduledMaintenance(env: Env, now = Date.now()) {
   ).results;
   const results = await db.batch([
     db.prepare("UPDATE appointments SET status='expirada',updated_at=CURRENT_TIMESTAMP WHERE status='solicitada' AND hold_expires_ms<?").bind(now),
+    db.prepare(
+      "UPDATE payments SET status='cancelado',error='La cita venció antes del pago',updated_at=CURRENT_TIMESTAMP WHERE status IN ('creado','pendiente') AND appointment_id IN (SELECT id FROM appointments WHERE status='expirada')",
+    ),
     db
-      .prepare(
-        "UPDATE payments SET status='cancelado',error='La cita venció antes del pago',updated_at=CURRENT_TIMESTAMP WHERE status IN ('creado','pendiente') AND appointment_id IN (SELECT id FROM appointments WHERE status='expirada')",
-      ),
-    db.prepare("UPDATE practitioners SET plan='free',updated_at=CURRENT_TIMESTAMP WHERE plan<>'free' AND plan_until_ms IS NOT NULL AND plan_until_ms<?").bind(now),
+      .prepare("UPDATE practitioners SET plan='free',updated_at=CURRENT_TIMESTAMP WHERE plan<>'free' AND plan_until_ms IS NOT NULL AND plan_until_ms<?")
+      .bind(now),
     db.prepare("UPDATE subscriptions SET status='vencida' WHERE status='activa' AND period_end_ms<?").bind(now),
     db.prepare("DELETE FROM sessions WHERE expires_at<?").bind(now),
     db.prepare("DELETE FROM rate_limits WHERE blocked_until<? AND window_start<?").bind(now, now - DAY),
@@ -67,10 +68,28 @@ export async function scheduledMaintenance(env: Env, now = Date.now()) {
     ).results;
     for (const a of due) {
       const when = formatLong(a.start_ms);
-      const extra = a.modality === "virtual" ? "Es virtual: el enlace de la videollamada se activa 15 min antes." : "Llega 10 minutos antes con tu código de llegada.";
+      const extra =
+        a.modality === "virtual" ? "Es virtual: el enlace de la videollamada se activa 15 min antes." : "Llega 10 minutos antes con tu código de llegada.";
       const [patient, pro] = await Promise.all([recipient(db, a.patient_id), recipient(db, a.pro_user_id)]);
-      if (patient) await notify(env, patient, { kind: type, title: `Tu cita es ${label}`, body: `${a.name} · ${when}. ${extra}`, link: `/citas/${a.id}`, origin, ref: `cita:${a.id}` });
-      if (pro) await notify(env, pro, { kind: type, title: `Cita ${a.modality} ${label}`, body: `Cita #${a.id} · ${when}.`, link: `/panel/citas/${a.id}`, origin, email: false, ref: `cita:${a.id}` });
+      if (patient)
+        await notify(env, patient, {
+          kind: type,
+          title: `Tu cita es ${label}`,
+          body: `${a.name} · ${when}. ${extra}`,
+          link: `/citas/${a.id}`,
+          origin,
+          ref: `cita:${a.id}`,
+        });
+      if (pro)
+        await notify(env, pro, {
+          kind: type,
+          title: `Cita ${a.modality} ${label}`,
+          body: `Cita #${a.id} · ${when}.`,
+          link: `/panel/citas/${a.id}`,
+          origin,
+          email: false,
+          ref: `cita:${a.id}`,
+        });
       await db.prepare("INSERT INTO appointment_events(appointment_id,type,detail) VALUES(?,?,?)").bind(a.id, type, "{}").run();
       reminders++;
     }

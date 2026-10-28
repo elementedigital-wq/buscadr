@@ -97,7 +97,9 @@ describe("panel profesional", () => {
       ],
     });
     expect(overlap.status).toBe(400);
-    const ok = await pro.browser.put("/api/pro/schedule", { rules: [1, 2, 3, 4, 5].map((d) => ({ weekday: d, start_min: 480, end_min: 600, modality: "virtual" })) });
+    const ok = await pro.browser.put("/api/pro/schedule", {
+      rules: [1, 2, 3, 4, 5].map((d) => ({ weekday: d, start_min: 480, end_min: 600, modality: "virtual" })),
+    });
     expect(ok.status).toBe(200);
     const day = weekday(3).slice(0, 10);
     const av = await new Browser().get(`/api/practitioners/${slug}/availability?from=${day}&days=1`);
@@ -116,7 +118,13 @@ describe("citas", () => {
     const { pro, id, slug } = await publishedPractitioner();
     const patient = await register("patient", { phone: "0987654321", whatsapp_opt_in: true });
     const start = weekday(2, 9);
-    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start, modality: "presencial", idempotency_key: key(), reason: "Control" });
+    const res = await patient.browser.post("/api/appointments", {
+      practitioner_id: id,
+      start,
+      modality: "presencial",
+      idempotency_key: key(),
+      reason: "Control",
+    });
     expect(res.status).toBe(201);
     expect(res.data.status).toBe("solicitada");
     expect(res.data.checkout).toBeNull();
@@ -142,7 +150,10 @@ describe("citas", () => {
     expect(ics.headers.get("content-type")).toContain("text/calendar");
     expect(ics.data.text).toContain("BEGIN:VEVENT");
     // Llega la hora de la cita: el profesional la marca atendida y registra el pago en el consultorio.
-    await db.prepare("UPDATE appointments SET start_ms=?, end_ms=? WHERE id=?").bind(Date.now() - 600_000, Date.now() + 1_200_000, aid).run();
+    await db
+      .prepare("UPDATE appointments SET start_ms=?, end_ms=? WHERE id=?")
+      .bind(Date.now() - 600_000, Date.now() + 1_200_000, aid)
+      .run();
     expect((await pro.browser.post(`/api/appointments/${aid}/actions/complete`)).status).toBe(200);
     expect((await pro.browser.post(`/api/appointments/${aid}/actions/mark_paid`, { body: "efectivo" })).status).toBe(200);
     const income = await pro.browser.get("/api/pro/income");
@@ -160,7 +171,9 @@ describe("citas", () => {
     const { id } = await publishedPractitioner();
     const start = weekday(4, 10);
     const patients = await Promise.all(Array.from({ length: 20 }, () => register("patient")));
-    const results = await Promise.all(patients.map((p) => p.browser.post("/api/appointments", { practitioner_id: id, start, modality: "presencial", idempotency_key: key() })));
+    const results = await Promise.all(
+      patients.map((p) => p.browser.post("/api/appointments", { practitioner_id: id, start, modality: "presencial", idempotency_key: key() })),
+    );
     expect(results.filter((r) => r.status === 201)).toHaveLength(1);
     expect(results.filter((r) => r.status === 409).every((r) => r.data.code === "BOOKING_SLOT_TAKEN")).toBe(true);
   });
@@ -186,7 +199,10 @@ describe("citas", () => {
     expect(res.data.checkout).toMatch(/^\/pagar\/[0-9a-f-]{36}$/);
     const payId = res.data.checkout.split("/").pop();
     const aid = res.data.id;
-    const appt = await db.prepare("SELECT price_cents,fee_cents,net_cents,payment_status,video_room FROM appointments WHERE id=?").bind(aid).first<Record<string, any>>();
+    const appt = await db
+      .prepare("SELECT price_cents,fee_cents,net_cents,payment_status,video_room FROM appointments WHERE id=?")
+      .bind(aid)
+      .first<Record<string, any>>();
     expect(appt?.price_cents).toBe(3000);
     expect(appt?.fee_cents).toBe(240);
     expect(appt?.net_cents).toBe(2760);
@@ -196,11 +212,26 @@ describe("citas", () => {
     expect((await pro.browser.get(`/api/appointments/${aid}`)).data.appointment.actions).not.toContain("confirm");
     // Otra cuenta no puede pagar ni ver el checkout.
     expect((await (await register("patient")).browser.get(`/api/payments/${payId}`)).status).toBe(404);
-    const declined = await patient.browser.post(`/api/payments/${payId}/sandbox`, { number: "4000 0000 0000 0002", exp: "12/30", cvv: "123", name: "Paciente Prueba" });
+    const declined = await patient.browser.post(`/api/payments/${payId}/sandbox`, {
+      number: "4000 0000 0000 0002",
+      exp: "12/30",
+      cvv: "123",
+      name: "Paciente Prueba",
+    });
     expect(declined.data.status).toBe("rechazado");
-    const invalid = await patient.browser.post(`/api/payments/${payId}/sandbox`, { number: "4111 1111 1111 1112", exp: "12/30", cvv: "123", name: "Paciente Prueba" });
+    const invalid = await patient.browser.post(`/api/payments/${payId}/sandbox`, {
+      number: "4111 1111 1111 1112",
+      exp: "12/30",
+      cvv: "123",
+      name: "Paciente Prueba",
+    });
     expect(invalid.status).toBe(400);
-    const paid = await patient.browser.post(`/api/payments/${payId}/sandbox`, { number: "4111 1111 1111 1111", exp: "12/30", cvv: "123", name: "Paciente Prueba" });
+    const paid = await patient.browser.post(`/api/payments/${payId}/sandbox`, {
+      number: "4111 1111 1111 1111",
+      exp: "12/30",
+      cvv: "123",
+      name: "Paciente Prueba",
+    });
     expect(paid.data.status).toBe("aprobado");
     const row = await db.prepare("SELECT status,card_last4,card_brand FROM payments WHERE id=?").bind(payId).first<Record<string, any>>();
     expect(row).toMatchObject({ status: "aprobado", card_last4: "1111", card_brand: "Visa" });
@@ -232,7 +263,10 @@ describe("citas", () => {
     const fresh = await db.prepare("SELECT status,rescheduled_from FROM appointments WHERE id=?").bind(moved.data.id).first<Record<string, any>>();
     expect(fresh?.rescheduled_from).toBe(res.data.id);
     // Sin respuesta del profesional, la solicitud vence y libera el horario.
-    await db.prepare("UPDATE appointments SET hold_expires_ms=? WHERE id=?").bind(Date.now() - 1000, moved.data.id).run();
+    await db
+      .prepare("UPDATE appointments SET hold_expires_ms=? WHERE id=?")
+      .bind(Date.now() - 1000, moved.data.id)
+      .run();
     const result = await scheduledMaintenance(env as unknown as Env);
     expect(result.expired).toBeGreaterThanOrEqual(1);
     expect((await pro.browser.post(`/api/appointments/${moved.data.id}/actions/confirm`)).status).toBe(409);
@@ -263,7 +297,17 @@ describe("WhatsApp", () => {
     const patient = await register("patient");
     const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(4, 16), modality: "presencial", idempotency_key: key() });
     const body = JSON.stringify({
-      entry: [{ changes: [{ value: { messages: [{ id: `wamid.${key()}`, from: "593991234567", type: "interactive", interactive: { button_reply: { id: `acc:${res.data.id}` } } }] } }] }],
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                messages: [{ id: `wamid.${key()}`, from: "593991234567", type: "interactive", interactive: { button_reply: { id: `acc:${res.data.id}` } } }],
+              },
+            },
+          ],
+        },
+      ],
     });
     const sig = `sha256=${await hmacHex("test-app-secret", body)}`;
     const hook = await new Browser().call("POST", "/api/whatsapp/webhook", JSON.parse(body), { "x-hub-signature-256": sig });
@@ -336,7 +380,10 @@ describe("CMS Maestro", () => {
     const site = await adm.get("/api/cms/site");
     const draft = {
       ...site.data.draft,
-      theme: { ...site.data.draft.theme, iconLibrary: { "user-injured": [448, 512, "M240 80a80 80 0 1 1 0 160 80 80 0 1 1 0-160z"], "bad<script>": [1, 1, "M0 0"] } },
+      theme: {
+        ...site.data.draft.theme,
+        iconLibrary: { "user-injured": [448, 512, "M240 80a80 80 0 1 1 0 160 80 80 0 1 1 0-160z"], "bad<script>": [1, 1, "M0 0"] },
+      },
       specialties: site.data.draft.specialties.map((s: { slug: string }) => (s.slug === "traumatologia" ? { ...s, icon: "user-injured" } : s)),
     };
     const saved = await adm.put("/api/cms/site", { config: draft, expectedVersion: site.data.version });

@@ -55,7 +55,9 @@ describe("agenda y horarios", () => {
   it("valida el horario semanal", () => {
     expect(validateRules([{ weekday: 7, start_min: 0, end_min: 60 }])).toMatch(/Día/);
     expect(validateRules([{ weekday: 1, start_min: 600, end_min: 600 }])).toMatch(/terminar/);
-    expect(validateRules([{ weekday: 2, start_min: 540, end_min: 720, modality: "x" }])).toEqual([{ weekday: 2, start_min: 540, end_min: 720, modality: "ambas" }]);
+    expect(validateRules([{ weekday: 2, start_min: 540, end_min: 720, modality: "x" }])).toEqual([
+      { weekday: 2, start_min: 540, end_min: 720, modality: "ambas" },
+    ]);
   });
 });
 
@@ -69,7 +71,14 @@ describe("tarifas y comisiones", () => {
 
 describe("estados de la cita", () => {
   const future = Date.now() + 2 * DAY;
-  const base = { status: "solicitada" as const, start_ms: future, end_ms: future + 30 * MINUTE, hold_expires_ms: Date.now() + HOUR, payment_mode: "consultorio", payment_status: "no_requerido" as const };
+  const base = {
+    status: "solicitada" as const,
+    start_ms: future,
+    end_ms: future + 30 * MINUTE,
+    hold_expires_ms: Date.now() + HOUR,
+    payment_mode: "consultorio",
+    payment_status: "no_requerido" as const,
+  };
   it("asigna acciones según rol y pago", () => {
     expect(availableActions(base, "pro", { demo: false, reviewed: false })).toEqual(["confirm", "decline"]);
     expect(availableActions(base, "patient", { demo: false, reviewed: false })).toEqual(["cancel", "reschedule"]);
@@ -94,7 +103,15 @@ describe("estados de la cita", () => {
     expect(videoOpen({ ...v, modality: "presencial" }, now)).toBe(false);
   });
   it("genera un archivo de calendario válido", () => {
-    const ics = icsFor({ id: 7, start_ms: Date.UTC(2026, 10, 2, 14), end_ms: Date.UTC(2026, 10, 2, 14, 30), modality: "virtual", title: "Cita, con; Dra.", location: "Video", url: "https://x/citas/7" });
+    const ics = icsFor({
+      id: 7,
+      start_ms: Date.UTC(2026, 10, 2, 14),
+      end_ms: Date.UTC(2026, 10, 2, 14, 30),
+      modality: "virtual",
+      title: "Cita, con; Dra.",
+      location: "Video",
+      url: "https://x/citas/7",
+    });
     expect(ics).toContain("DTSTART:20261102T140000Z");
     expect(ics).toContain("SUMMARY:Cita\\, con\\; Dra.");
   });
@@ -120,7 +137,10 @@ describe("buscaDR Pay (sandbox)", () => {
     expect(cardBrand("5555555555554444")).toBe("Mastercard");
     const ok = sandboxDecision({ number: "4111111111111111", exp: "12/30", cvv: "123", name: "Ana" }, new Date("2026-11-01"));
     expect(ok).toMatchObject({ ok: true, brand: "Visa", last4: "1111" });
-    expect(sandboxDecision({ number: "4000000000000002", exp: "12/30", cvv: "123", name: "Ana" }, new Date("2026-11-01"))).toMatchObject({ ok: false, declined: true });
+    expect(sandboxDecision({ number: "4000000000000002", exp: "12/30", cvv: "123", name: "Ana" }, new Date("2026-11-01"))).toMatchObject({
+      ok: false,
+      declined: true,
+    });
     expect(sandboxDecision({ number: "4111111111111111", exp: "01/20", cvv: "123", name: "Ana" }, new Date("2026-11-01")).ok).toBe(false);
   });
 });
@@ -149,14 +169,21 @@ describe("catálogo y WhatsApp", () => {
     expect(toE164Ecuador("12345")).toBeNull();
     const buttons = buildPayload("593991234567", { kind: "buttons", body: "¿Confirmas?", buttons: [{ id: "acc:1", title: "Confirmar" }] }) as any;
     expect(buttons.interactive.action.buttons[0].reply.id).toBe("acc:1");
-    const inbound = parseInbound({ entry: [{ changes: [{ value: { messages: [{ id: "w1", from: "593991234567", type: "button", button: { payload: "acc:9" } }] } }] }] });
+    const inbound = parseInbound({
+      entry: [{ changes: [{ value: { messages: [{ id: "w1", from: "593991234567", type: "button", button: { payload: "acc:9" } }] } }] }],
+    });
     expect(inbound[0].buttonId).toBe("acc:9");
   });
 });
 
 describe("CMS", () => {
   it("sanea el documento y conserva la paleta del Brand Deck", () => {
-    const c = normalizeCms({ theme: { primary: "javascript:alert(1)", logo: "https://evil.com/../x" }, hero: { title: "<b>Hola</b>" }, layout: { columns: 9 }, copy: { emergencyNotice: "" } });
+    const c = normalizeCms({
+      theme: { primary: "javascript:alert(1)", logo: "https://evil.com/../x" },
+      hero: { title: "<b>Hola</b>" },
+      layout: { columns: 9 },
+      copy: { emergencyNotice: "" },
+    });
     expect(c.theme.primary).toBe("#0F62FE");
     expect(c.theme.secondary).toBe("#10B981");
     expect(c.theme.logo).toBe("/assets/buscadr-logo.png");

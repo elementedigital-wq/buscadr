@@ -13,7 +13,12 @@ export const feeBps = (env: { BUSCADR_FEE_BPS?: string }) => {
 
 export type Price = { price_cents: number; fee_cents: number; net_cents: number; fee_bps: number };
 
-export function priceFor(p: { price_in_person_cents: number; price_virtual_cents: number }, modality: "presencial" | "virtual", online: boolean, bps: number): Price {
+export function priceFor(
+  p: { price_in_person_cents: number; price_virtual_cents: number },
+  modality: "presencial" | "virtual",
+  online: boolean,
+  bps: number,
+): Price {
   const price = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
   const fee = online ? Math.round((price * bps) / 10_000) : 0;
   return { price_cents: price, fee_cents: fee, net_cents: price - fee, fee_bps: online ? bps : 0 };

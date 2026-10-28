@@ -63,7 +63,15 @@ export function rangeSlots(from: string, days: number, rules: Rule[], settings: 
 }
 
 /** Comprueba que un inicio concreto coincide con un horario publicado para esa modalidad. */
-export function isOfferedSlot(startMs: number, modality: Modality, rules: Rule[], settings: SlotSettings, busy: Interval[], blocks: Interval[], now = Date.now()) {
+export function isOfferedSlot(
+  startMs: number,
+  modality: Modality,
+  rules: Rule[],
+  settings: SlotSettings,
+  busy: Interval[],
+  blocks: Interval[],
+  now = Date.now(),
+) {
   const date = new Date(startMs - 5 * 3_600_000).toISOString().slice(0, 10);
   return daySlots(date, rules, settings, busy, blocks, now).some((s) => s.start_ms === startMs && s.modalities.includes(modality));
 }
@@ -85,7 +93,8 @@ export function validateRules(input: unknown): Rule[] | string {
   }
   for (const a of rules)
     for (const b of rules)
-      if (a !== b && a.weekday === b.weekday && a.start_min < b.end_min && b.start_min < a.end_min) return "Hay bloques de horario que se superponen el mismo día";
+      if (a !== b && a.weekday === b.weekday && a.start_min < b.end_min && b.start_min < a.end_min)
+        return "Hay bloques de horario que se superponen el mismo día";
   return rules;
 }
 

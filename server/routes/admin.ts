@@ -41,14 +41,18 @@ admin.get("/kpis", async (c) => {
       `SELECT substr(a.completed_at,1,7) AS month, p.city, COUNT(*) AS n FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id
        WHERE a.status='completada' AND ${real} GROUP BY month,p.city ORDER BY month DESC LIMIT 36`,
     ),
-    all<{ status: string; n: number }>(`SELECT a.status, COUNT(*) AS n FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id WHERE ${real} GROUP BY a.status`),
+    all<{ status: string; n: number }>(
+      `SELECT a.status, COUNT(*) AS n FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id WHERE ${real} GROUP BY a.status`,
+    ),
     one<{ decided: number; confirmed: number; avg_minutes: number | null }>(
       `SELECT COUNT(*) AS decided, SUM(CASE WHEN e.type='confirm' THEN 1 ELSE 0 END) AS confirmed,
               AVG(CASE WHEN e.type='confirm' THEN (julianday(e.created_at)-julianday(a.created_at))*1440 END) AS avg_minutes
        FROM appointment_events e JOIN appointments a ON a.id=e.appointment_id JOIN practitioners p ON p.id=a.practitioner_id
        WHERE e.type IN ('confirm','decline') AND ${real}`,
     ),
-    all<{ status: string; verification: string; n: number }>("SELECT status, verification, COUNT(*) AS n FROM practitioners WHERE demo=0 GROUP BY status, verification"),
+    all<{ status: string; verification: string; n: number }>(
+      "SELECT status, verification, COUNT(*) AS n FROM practitioners WHERE demo=0 GROUP BY status, verification",
+    ),
     one<{ total: number; last30: number; whatsapp: number; pros: number }>(
       `SELECT COUNT(*) AS total, SUM(CASE WHEN created_at > (strftime('%s','now')-30*86400)*1000 THEN 1 ELSE 0 END) AS last30,
               SUM(whatsapp_opt_in) AS whatsapp, SUM(CASE WHEN role='pro' THEN 1 ELSE 0 END) AS pros FROM users WHERE demo=0 AND staff_role=''`,
@@ -68,13 +72,17 @@ admin.get("/kpis", async (c) => {
     all<{ query: string; specialty: string; city: string; n: number }>(
       `SELECT query, specialty, city, COUNT(*) AS n FROM demand_log WHERE created_at > datetime('now','-60 days') GROUP BY lower(query), specialty, city ORDER BY n DESC LIMIT 15`,
     ),
-    all<{ channel: string; status: string; n: number }>("SELECT channel, status, COUNT(*) AS n FROM notification_log WHERE created_at > datetime('now','-30 days') GROUP BY channel, status"),
+    all<{ channel: string; status: string; n: number }>(
+      "SELECT channel, status, COUNT(*) AS n FROM notification_log WHERE created_at > datetime('now','-30 days') GROUP BY channel, status",
+    ),
     one<{ views: number; requests: number; completed: number }>(
       `SELECT (SELECT COALESCE(SUM(views),0) FROM practitioners WHERE demo=0) AS views,
               (SELECT COUNT(*) FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id WHERE ${real}) AS requests,
               (SELECT COUNT(*) FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id WHERE ${real} AND a.status='completada') AS completed`,
     ),
-    all<{ specialty: string; n: number }>("SELECT specialty, COUNT(*) AS n FROM practitioners WHERE status='active' AND demo=0 GROUP BY specialty ORDER BY n DESC"),
+    all<{ specialty: string; n: number }>(
+      "SELECT specialty, COUNT(*) AS n FROM practitioners WHERE status='active' AND demo=0 GROUP BY specialty ORDER BY n DESC",
+    ),
   ]);
   return c.json({
     northStar,
@@ -96,7 +104,8 @@ admin.get("/kpis", async (c) => {
       conversion: funnel?.views ? (funnel.requests ?? 0) / funnel.views : null,
     },
     bySpecialty: bySpecialty.map((x) => ({ ...x, name: SPECIALTY_MAP.get(x.specialty)?.name ?? x.specialty })),
-    notes: "Datos reales: excluye perfiles y citas de muestra. Ingresos de buscaDR = comisión de citas pagadas en línea + planes (MRR). Los pagos en modo sandbox no son dinero real.",
+    notes:
+      "Datos reales: excluye perfiles y citas de muestra. Ingresos de buscaDR = comisión de citas pagadas en línea + planes (MRR). Los pagos en modo sandbox no son dinero real.",
   });
 });
 
@@ -120,13 +129,21 @@ admin.post("/practitioners/:id/review", async (c) => {
   const db = c.env.DB;
   const id = Number(c.req.param("id"));
   const b = await readJson<{ decision?: string; note?: string }>(c);
-  const p = await db.prepare("SELECT id,user_id,slug,status,demo FROM practitioners WHERE id=?").bind(id).first<{ id: number; user_id: string; slug: string; status: string; demo: number }>();
+  const p = await db
+    .prepare("SELECT id,user_id,slug,status,demo FROM practitioners WHERE id=?")
+    .bind(id)
+    .first<{ id: number; user_id: string; slug: string; status: string; demo: number }>();
   if (!p) fail(404, "Perfil no encontrado");
   const note = clean(b.note, 300);
   let title = "";
   let body = "";
   if (b.decision === "approve") {
-    await db.prepare("UPDATE practitioners SET status='active',verification='verificado',verified_at=CURRENT_TIMESTAMP,review_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(note, id).run();
+    await db
+      .prepare(
+        "UPDATE practitioners SET status='active',verification='verificado',verified_at=CURRENT_TIMESTAMP,review_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+      )
+      .bind(note, id)
+      .run();
     await track(db, "practitioner_verified", { userId: user.id, practitionerId: id });
     title = "¡Tu perfil está verificado y publicado!";
     body = "Los pacientes ya pueden encontrarte y reservar citas. Revisa tu horario y tus tarifas.";
@@ -137,7 +154,10 @@ admin.post("/practitioners/:id/review", async (c) => {
     body = "Ya recibes citas. El sello «Verificado» se agrega cuando buscaDR confirme tus credenciales.";
   } else if (b.decision === "reject") {
     if (note.length < 5) fail(400, "Explica al profesional qué debe corregir");
-    await db.prepare("UPDATE practitioners SET status='rejected',verification='rechazado',review_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(note, id).run();
+    await db
+      .prepare("UPDATE practitioners SET status='rejected',verification='rechazado',review_note=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      .bind(note, id)
+      .run();
     title = "Tu perfil necesita ajustes";
     body = note;
   } else if (b.decision === "suspend") {
@@ -147,14 +167,17 @@ admin.post("/practitioners/:id/review", async (c) => {
   } else fail(400, "Decisión inválida");
   if (!p.demo) {
     const to = await recipient(db, p.user_id);
-    if (to) c.executionCtx.waitUntil(notify(c.env, to, { kind: `perfil_${b.decision}`, title, body, link: "/panel/perfil", origin: new URL(c.req.url).origin }));
+    if (to)
+      c.executionCtx.waitUntil(notify(c.env, to, { kind: `perfil_${b.decision}`, title, body, link: "/panel/perfil", origin: new URL(c.req.url).origin }));
   }
   return c.json({ ok: true });
 });
 
 /** Libro de transacciones de toda la plataforma (sin datos de tarjeta). CSV con ?format=csv. */
 admin.get("/payments", async (c) => {
-  const status = ["aprobado", "pendiente", "rechazado", "reembolsado", "creado", "cancelado"].includes(String(c.req.query("status"))) ? String(c.req.query("status")) : null;
+  const status = ["aprobado", "pendiente", "rechazado", "reembolsado", "creado", "cancelado"].includes(String(c.req.query("status")))
+    ? String(c.req.query("status"))
+    : null;
   const rows = (
     await c.env.DB.prepare(
       `SELECT pay.id,pay.kind,pay.plan,pay.appointment_id,pay.amount_cents,pay.fee_cents,pay.net_cents,pay.provider,pay.status,pay.method,pay.card_brand,pay.card_last4,
@@ -169,11 +192,25 @@ admin.get("/payments", async (c) => {
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const head = ["fecha", "id", "tipo", "cita", "pagador", "profesional", "proveedor", "estado", "bruto", "comision", "neto"];
     const lines = rows.map((r) =>
-      [r.created_at, r.id, r.kind, r.appointment_id, r.payer, r.practitioner, r.provider, r.status_label, (r.amount_cents / 100).toFixed(2), (r.fee_cents / 100).toFixed(2), (r.net_cents / 100).toFixed(2)]
+      [
+        r.created_at,
+        r.id,
+        r.kind,
+        r.appointment_id,
+        r.payer,
+        r.practitioner,
+        r.provider,
+        r.status_label,
+        (r.amount_cents / 100).toFixed(2),
+        (r.fee_cents / 100).toFixed(2),
+        (r.net_cents / 100).toFixed(2),
+      ]
         .map(esc)
         .join(","),
     );
-    return new Response(`﻿${[head.join(","), ...lines].join("\n")}\n`, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="transacciones-buscadr.csv"' } });
+    return new Response(`﻿${[head.join(","), ...lines].join("\n")}\n`, {
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="transacciones-buscadr.csv"' },
+    });
   }
   return c.json({ items: rows });
 });
@@ -212,6 +249,8 @@ admin.get("/reviews", async (c) => {
 admin.post("/reviews/:id", async (c) => {
   requireAdmin(c);
   const hidden = (await readJson<{ hidden?: boolean }>(c)).hidden ? 1 : 0;
-  await c.env.DB.prepare("UPDATE reviews SET hidden=? WHERE id=?").bind(hidden, Number(c.req.param("id"))).run();
+  await c.env.DB.prepare("UPDATE reviews SET hidden=? WHERE id=?")
+    .bind(hidden, Number(c.req.param("id")))
+    .run();
   return c.json({ ok: true, hidden: !!hidden });
 });

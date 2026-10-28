@@ -176,7 +176,11 @@ export const DEFAULT_CMS = {
     steps: [
       { title: "Busca", text: "Filtra por especialidad, ciudad, modalidad y disponibilidad real.", icon: "magnifying-glass" },
       { title: "Agenda", text: "Elige día y hora en el calendario. Ves la tarifa presencial o virtual antes de confirmar.", icon: "regular:calendar-check" },
-      { title: "Confirma y asiste", text: "El profesional confirma tu cita y te recordamos 24 h y 1 h antes. Paga en línea o en el consultorio.", icon: "regular:bell" },
+      {
+        title: "Confirma y asiste",
+        text: "El profesional confirma tu cita y te recordamos 24 h y 1 h antes. Paga en línea o en el consultorio.",
+        icon: "regular:bell",
+      },
     ] as IconText[],
     promises: [
       { title: "Privacidad por defecto", text: "No pedimos historia clínica ni compartimos tu número con terceros.", icon: "lock" },
@@ -186,10 +190,12 @@ export const DEFAULT_CMS = {
     ] as IconText[],
     proEyebrow: "Para profesionales y clínicas",
     proTitle: "Tu agenda, tus pacientes y tus cobros en un solo lugar",
-    proText: "Calendario de citas, confirmación desde WhatsApp, consultas virtuales con tarifa propia, cobros en línea registrados y métricas de tu consultorio.",
+    proText:
+      "Calendario de citas, confirmación desde WhatsApp, consultas virtuales con tarifa propia, cobros en línea registrados y métricas de tu consultorio.",
     whatsappEyebrow: "WhatsApp",
     whatsappTitle: "Confirma citas desde WhatsApp",
-    whatsappText: "Con tu autorización, te avisamos de cada solicitud con botones para confirmar o rechazar. Tus pacientes reciben la confirmación y los recordatorios.",
+    whatsappText:
+      "Con tu autorización, te avisamos de cada solicitud con botones para confirmar o rechazar. Tus pacientes reciben la confirmación y los recordatorios.",
     virtualEyebrow: "Telemedicina",
     virtualTitle: "Consultas virtuales con videollamada",
     virtualText: "Sin instalar nada: el enlace seguro se activa 15 minutos antes de tu cita.",
@@ -278,7 +284,8 @@ export function normalizeCms(input: any) {
   const fonts = normalizeFonts(t.fonts);
   const iconLibrary = normalizeIconLibrary(t.iconLibrary);
   /** Ícono del catálogo curado, de la librería elegida en el CMS o imagen subida. */
-  const iconValue = (x: unknown, fallback: string) => (isIconName(x) || (typeof x === "string" && x in iconLibrary) || validAsset(x) ? (x as string) : fallback);
+  const iconValue = (x: unknown, fallback: string) =>
+    isIconName(x) || (typeof x === "string" && x in iconLibrary) || validAsset(x) ? (x as string) : fallback;
   const families = new Set<string>([...BUILTIN_FONTS, ...fonts.map((f) => f.family)]);
   const theme = {
     primary: color(t.primary, d.theme.primary),

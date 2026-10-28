@@ -1,29 +1,36 @@
 # Monetización
 
-## Modelo vigente (piloto, sin cobro)
+buscaDR combina **SaaS para profesionales** (planes mensuales) con **comisión transaccional** por citas pagadas en línea con buscaDR Pay. Todo se registra en el libro de pagos (`payments`) y se ve en `/admin` (KPIs) y en `/panel/ingresos` (cada profesional).
 
-| Concepto | Valor | Dónde |
+## Fuentes de ingreso activas en el código
+
+| Fuente | Valor | Dónde se configura |
 |---|---|---|
-| Comisión al propietario | 15 % del alquiler | `BUSCADR_OWNER_FEE_BPS=1500` |
-| Tarifa de servicio a quien alquila | 10 % del alquiler | `BUSCADR_RENTER_FEE_BPS=1000` |
-| Garantía (depósito) | Fijada por el propietario; aparte, reembolsable | Ficha y reserva |
-| Entrega a domicilio | Tarifa fija del propietario | Ficha y reserva |
+| Plan **Gratis** | $0 · ficha, opiniones, hasta 15 citas/mes | `server/lib/catalog.ts` (`PLANS`) |
+| Plan **Agenda** | $15/mes · agenda ilimitada, enlace propio, WhatsApp y correo | Igual |
+| Plan **Pro** | $29/mes · + citas virtuales, cobros en línea, recordatorios, métricas | Igual |
+| Plan **Growth** | $59/mes · + varias ubicaciones, automatizaciones, reportes | Igual |
+| Plan **Clinic** | desde $119/mes · sede con hasta 5 profesionales | Igual |
+| Comisión buscaDR Pay | 8 % de cada cita pagada en línea (la asume el profesional) | `BUSCADR_FEE_BPS=800` |
+| Cobro en consultorio | 0 % (se registra para el historial del profesional) | — |
 
-Take rate efectivo: **25 % del alquiler**. Durante el piloto **no se cobra nada dentro de buscaDR**: la web muestra el total, el propietario ve cuánto recibiría y los KPIs calculan lo que buscaDR habría facturado. Los precios se muestran como «total estimado» para que quien alquila nunca descubra cargos al final.
+Los planes se pagan con buscaDR Pay desde `/panel/plan` y se renuevan por 30 días. Durante el piloto `BUSCADR_ENFORCE_PLANS` está apagado: todas las funciones están disponibles para medir uso antes de cobrar.
 
-## Unidad económica (panel `/admin`)
+## KPIs (`/admin`)
 
-Contribución estimada por alquiler completado = comisiones − PSP (3,5 % + $0,25) − riesgo/daños (1 % del GMV) − soporte ($0,80). Supuestos del Documento Maestro §14; se ajustan en `server/routes/admin.ts` cuando haya datos reales. Los anuncios de muestra se excluyen de todos los KPIs.
+North Star: **citas realizadas** gestionadas por buscaDR (mes y ciudad). Además: tasa y tiempo de confirmación, conversión perfil → solicitud, ingresos buscaDR (comisión + MRR), pagos aprobados y en consultorio, reembolsos, avisos entregados, oferta por especialidad y **demanda no atendida** (búsquedas sin resultados). Los perfiles de muestra se excluyen de todo.
 
-## Palancas que ya habilita el código
+## Próximas palancas (priorizadas)
 
-1. **Destacados pagados** (CMS → Anuncios → «Destacado»): ya existe la posición y la etiqueta; falta solo cobrarlos.
-2. **Entrega a domicilio** como servicio con margen (hoy la tarifa es 100 % del propietario).
-3. **Referidos** (`referral_code` en cada cuenta) para créditos de primera reserva cuando haya pagos.
-4. **Demanda no resuelta** (`demand_log`): qué buscan y no encuentran → captación dirigida de propietarios y, más adelante, flota propia o alianzas con ferreterías/rentadoras.
-5. **Planes Pro para propietarios** (varias unidades, calendario, facturas): misma cuenta, rol con más límites.
-6. **Protección/garantía opcional** con aseguradora local, solo tras el Go/No-Go y revisión legal.
+1. **Pago anticipado como estándar en virtual** (ya activo) y opcional en presencial para especialidades con alto ausentismo: reduce no-shows y aumenta la comisión.
+2. **Perfil destacado pagado** (CMS → Profesionales → «Destacado»): la posición y la etiqueta ya existen; falta el cobro mensual.
+3. **Recordatorios con confirmación de asistencia** por WhatsApp (botón «Asistiré»), incluidos desde Agenda.
+4. **Clinic y multi-sede**: agenda de recepción, varios profesionales, reportes por profesional (tabla `subscriptions` ya admite el plan).
+5. **Paquetes y suscripciones de pacientes** (controles de niño sano, nutrición mensual) cobrados con buscaDR Pay.
+6. **Convenios con aseguradoras y empresas** (medicina prepagada, salud ocupacional) usando el campo `insurances` del perfil.
+7. **Laboratorio e imagenología** como «servicios» (tipo `servicio`) con reserva y pago en línea.
+8. **Referidos** (`referral_code` en cada cuenta) para crédito en la primera cita o meses gratis entre colegas.
 
-## Antes de cobrar (Go/No-Go)
+## Antes de cobrar dinero real (Go/No-Go del Documento Maestro)
 
-PSP local con split payments y retención de depósitos (p. ej. Kushki, Payphone, Datafast/Nuvei), facturación electrónica SRI, términos y política de privacidad revisados (LOPDP), proceso de disputas, verificación de identidad para propietarios con equipos de mayor valor. Nada de esto está activo hoy.
+Contrato con Payphone (u otro adquirente: Kushki, Datafast/Nuvei) y verificación de sus endpoints, liquidaciones a profesionales, facturación electrónica SRI, términos y privacidad revisados (LOPDP, datos de salud), proceso de disputas y verificación de identidad y registro profesional (ACESS/SENESCYT).

@@ -161,19 +161,44 @@ const ES: Record<string, string> = {
   google: "google",
 };
 
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .trim();
+const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
 /** Selección inicial cuando no se escribe nada: íconos útiles para un directorio médico. */
 const STARTER = [
-  "stethoscope", "user-doctor", "hospital", "house-medical", "heart-pulse", "baby", "person-pregnant", "hand-dots", "tooth", "brain",
-  "apple-whole", "person-walking", "bone", "eye", "ear-listen", "vial", "microscope", "pills", "syringe", "kit-medical", "video",
-  "laptop-medical", "calendar-check", "calendar-days", "clock", "magnifying-glass", "location-dot", "user", "comment-medical", "bell",
-  "credit-card", "shield-halved", "star", "brands:whatsapp",
+  "stethoscope",
+  "user-doctor",
+  "hospital",
+  "house-medical",
+  "heart-pulse",
+  "baby",
+  "person-pregnant",
+  "hand-dots",
+  "tooth",
+  "brain",
+  "apple-whole",
+  "person-walking",
+  "bone",
+  "eye",
+  "ear-listen",
+  "vial",
+  "microscope",
+  "pills",
+  "syringe",
+  "kit-medical",
+  "video",
+  "laptop-medical",
+  "calendar-check",
+  "calendar-days",
+  "clock",
+  "magnifying-glass",
+  "location-dot",
+  "user",
+  "comment-medical",
+  "bell",
+  "credit-card",
+  "shield-halved",
+  "star",
+  "brands:whatsapp",
 ];
 
 export async function searchIcons(query: string, style: IconStyle | "all" = "all", limit = 96) {

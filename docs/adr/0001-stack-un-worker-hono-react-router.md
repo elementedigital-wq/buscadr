@@ -1,9 +1,9 @@
-# ADR 0001 — Un Worker con Hono + React Router SSR (mismo stack que YANK)
+# ADR 0001 — Un Worker con API Hono y web React Router 8 (SSR)
 
-**Estado:** aceptada (26-oct-2026)
+**Estado:** aceptada (28-oct-2026). Reemplaza la demo estática (HTML/JS + API Node con SQLite) y el borrador de arquitectura con PostgreSQL/PostGIS.
 
-**Contexto.** La v0.3 era una SPA en JavaScript sin tipos (`app.js`, ~1 900 líneas) con datos en `localStorage` y varios `wrangler*.toml` en conflicto (Pages y Worker). Reservas, anuncios y mensajes no eran compartidos entre usuarios.
+**Contexto.** buscaDR necesitaba pasar de una demo sin persistencia real a un producto que guarde cuentas, citas y pagos, con SEO para el directorio médico, coste bajo y un solo despliegue. El equipo ya opera Workers + D1 en otros proyectos (Yank, Tull).
 
-**Decisión.** Reescribir sobre el stack ya probado en YANK: un único Worker `buscadr` con API Hono (`/api/*`) y web React Router 8 con SSR, TypeScript estricto, Tailwind 4, Biome y Vitest en workerd. Se conservan nombre del Worker, binding y base D1.
+**Decisión.** Un único Cloudflare Worker `buscadr` (`workers/app.ts`): `/api/*` lo atiende Hono (`server/`) y el resto, React Router 8 con SSR (`app/`). Tailwind 4, TypeScript estricto, Zod para validar entradas, Vitest en `workerd` con D1 real y Biome. `wrangler.jsonc` despliega; `wrangler.app.jsonc` sirve para desarrollo con Vite (mismos bindings, comprobado por `scripts/check-wrangler.mjs`).
 
-**Consecuencias.** SEO real (SSR, landings, sitemap), un solo despliegue, pruebas con D1 real, y el mismo CMS que YANK. Se pierde el modo «solo navegador»: todo dato es compartido y persistente.
+**Consecuencias.** Un deploy, sin servidores ni CORS; SSR para landings `/medicos/{ciudad}/{especialidad}` y perfiles. PostGIS deja de ser necesario: la cercanía se calcula en el Worker con coordenadas aproximadas. Si el volumen lo exige, D1 puede reemplazarse por Hyperdrive + Postgres sin cambiar la API.

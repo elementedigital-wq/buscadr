@@ -12,7 +12,13 @@ export async function sendMail(env: Env, msg: { to: string; subject: string; tex
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.BUSCADR_MAIL_FROM || "buscaDR <onboarding@resend.dev>", to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html }),
+      body: JSON.stringify({
+        from: env.BUSCADR_MAIL_FROM || "buscaDR <onboarding@resend.dev>",
+        to: [msg.to],
+        subject: msg.subject,
+        text: msg.text,
+        html: msg.html,
+      }),
     });
     if (!res.ok) console.error(JSON.stringify({ event: "buscadr_mail_failed", status: res.status }));
     return res.ok;

@@ -28,7 +28,10 @@ export async function loadAgenda(db: D1Database, ids: number[], from: number, to
   if (!ids.length) return out;
   const marks = ids.map(() => "?").join(",");
   const [rules, blocks, busy] = await Promise.all([
-    db.prepare(`SELECT practitioner_id,weekday,start_min,end_min,modality FROM availability_rules WHERE practitioner_id IN (${marks})`).bind(...ids).all<Rule & { practitioner_id: number }>(),
+    db
+      .prepare(`SELECT practitioner_id,weekday,start_min,end_min,modality FROM availability_rules WHERE practitioner_id IN (${marks})`)
+      .bind(...ids)
+      .all<Rule & { practitioner_id: number }>(),
     db
       .prepare(`SELECT practitioner_id,start_ms,end_ms FROM availability_blocks WHERE practitioner_id IN (${marks}) AND start_ms<? AND end_ms>?`)
       .bind(...ids, to, from)
@@ -107,11 +110,18 @@ practitioners.get("/", async (c) => {
   if (modality === "presencial") where.push("p.in_person_enabled=1");
   // El texto se compara sin tildes en el Worker («mendez» encuentra «Méndez»); el volumen del piloto lo permite.
   const nq = normalizeText(q);
-  const rows = (await db.prepare(`SELECT p.* FROM practitioners p WHERE ${where.join(" AND ")} LIMIT 400`).bind(...binds).all<PractitionerRow>()).results.filter(
+  const rows = (
+    await db
+      .prepare(`SELECT p.* FROM practitioners p WHERE ${where.join(" AND ")} LIMIT 400`)
+      .bind(...binds)
+      .all<PractitionerRow>()
+  ).results.filter(
     (p) =>
       !nq ||
       (!SPECIALTY_MAP.has(specialtyParam) && specialty && p.specialty === specialty) ||
-      normalizeText([p.title, p.display_name, p.sector, p.city, p.headline, p.services, p.subspecialty, SPECIALTY_MAP.get(p.specialty)?.name ?? ""].join(" ")).includes(nq),
+      normalizeText(
+        [p.title, p.display_name, p.sector, p.city, p.headline, p.services, p.subspecialty, SPECIALTY_MAP.get(p.specialty)?.name ?? ""].join(" "),
+      ).includes(nq),
   );
   const now = Date.now();
   const reps = await reputationFor(
@@ -151,7 +161,10 @@ practitioners.get("/", async (c) => {
   if (q || specialty) {
     c.executionCtx.waitUntil(
       Promise.all([
-        track(db, items.length ? "search_submitted" : "search_empty", { userId: c.get("user")?.id ?? null, props: { specialty, city: city?.name ?? null, modality, results: items.length } }),
+        track(db, items.length ? "search_submitted" : "search_empty", {
+          userId: c.get("user")?.id ?? null,
+          props: { specialty, city: city?.name ?? null, modality, results: items.length },
+        }),
         items.length
           ? Promise.resolve()
           : db
@@ -207,7 +220,11 @@ practitioners.get("/:slug", async (c) => {
       reply: r.reply,
       created_at: r.created_at,
       // Opinión verificada: nombre y primera inicial del apellido.
-      author: r.name.split(/\s+/).slice(0, 2).map((w, i) => (i ? `${w[0]}.` : w)).join(" "),
+      author: r.name
+        .split(/\s+/)
+        .slice(0, 2)
+        .map((w, i) => (i ? `${w[0]}.` : w))
+        .join(" "),
     })),
   });
 });
@@ -238,7 +255,9 @@ practitioners.get("/:slug/availability", async (c) => {
 favorites.get("/", async (c) => {
   const user = requireUser(c);
   const rows = (
-    await c.env.DB.prepare("SELECT p.* FROM favorites f JOIN practitioners p ON p.id=f.practitioner_id WHERE f.user_id=? AND p.status='active' ORDER BY f.created_at DESC")
+    await c.env.DB.prepare(
+      "SELECT p.* FROM favorites f JOIN practitioners p ON p.id=f.practitioner_id WHERE f.user_id=? AND p.status='active' ORDER BY f.created_at DESC",
+    )
       .bind(user.id)
       .all<PractitionerRow>()
   ).results;
@@ -246,19 +265,28 @@ favorites.get("/", async (c) => {
     c.env.DB,
     rows.map((r) => r.id),
   );
-  return c.json({ items: await withCms(c.env.DB, rows.map((p) => publicPractitioner(p, reps.get(p.id)))) });
+  return c.json({
+    items: await withCms(
+      c.env.DB,
+      rows.map((p) => publicPractitioner(p, reps.get(p.id))),
+    ),
+  });
 });
 
 favorites.put("/:id", async (c) => {
   const user = requireUser(c);
   const id = Number(c.req.param("id"));
   if (!Number.isSafeInteger(id)) fail(404, "Perfil no encontrado");
-  const res = await c.env.DB.prepare("INSERT OR IGNORE INTO favorites(user_id,practitioner_id) SELECT ?,id FROM practitioners WHERE id=? AND status='active'").bind(user.id, id).run();
+  const res = await c.env.DB.prepare("INSERT OR IGNORE INTO favorites(user_id,practitioner_id) SELECT ?,id FROM practitioners WHERE id=? AND status='active'")
+    .bind(user.id, id)
+    .run();
   return c.json({ ok: true, favorite: true, changed: res.meta.changes });
 });
 
 favorites.delete("/:id", async (c) => {
   const user = requireUser(c);
-  await c.env.DB.prepare("DELETE FROM favorites WHERE user_id=? AND practitioner_id=?").bind(user.id, Number(c.req.param("id"))).run();
+  await c.env.DB.prepare("DELETE FROM favorites WHERE user_id=? AND practitioner_id=?")
+    .bind(user.id, Number(c.req.param("id")))
+    .run();
   return c.json({ ok: true, favorite: false });
 });

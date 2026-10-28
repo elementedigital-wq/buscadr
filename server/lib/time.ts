@@ -51,4 +51,11 @@ export const formatLocal = (ms: number) =>
 
 /** «lunes 3 de noviembre, 09:30» para avisos de WhatsApp y correo. */
 export const formatLong = (ms: number) =>
-  new Intl.DateTimeFormat("es-EC", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" }).format(ms);
+  new Intl.DateTimeFormat("es-EC", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Guayaquil",
+  }).format(ms);

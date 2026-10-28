@@ -18,7 +18,7 @@ export function Field({ path, label, hint, children, wide }: { path: string; lab
   const active = focusPath === path;
   return (
     <div
-      className={`flex min-w-0 flex-col gap-1.5 rounded-xl text-sm font-medium transition ${wide ? "sm:col-span-2" : ""} ${active ? "bg-turquesa/15 p-2 ring-2 ring-turquesa" : ""}`}
+      className={`flex min-w-0 flex-col gap-1.5 rounded-xl text-sm font-medium transition ${wide ? "sm:col-span-2" : ""} ${active ? "bg-verde/15 p-2 ring-2 ring-cielo" : ""}`}
       data-field={path}
     >
       <label htmlFor={fieldId(path)}>{label}</label>
@@ -112,14 +112,14 @@ export function Toggle({ path, label, hint }: { path: string; label: string; hin
   const id = fieldId(path);
   const on = !!getPath(config, path);
   return (
-    <div className={`flex items-start gap-3 rounded-xl p-2 ${focusPath === path ? "bg-turquesa/15 ring-2 ring-turquesa" : ""}`} data-field={path}>
+    <div className={`flex items-start gap-3 rounded-xl p-2 ${focusPath === path ? "bg-verde/15 ring-2 ring-cielo" : ""}`} data-field={path}>
       <button
         id={id}
         type="button"
         role="switch"
         aria-checked={on}
         onClick={() => update(path, !on)}
-        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${on ? "bg-morado" : "bg-gris-claro ring-1 ring-black/15"}`}
+        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${on ? "bg-azul" : "bg-gris-claro ring-1 ring-tinta/15"}`}
       >
         <span className={`absolute top-0.5 size-5 rounded-full bg-white shadow transition ${on ? "left-[22px]" : "left-0.5"}`} />
         <span className="sr-only">{label}</span>
@@ -146,7 +146,7 @@ export function ColorField({ path, label, hint }: { path: string; label: string;
           type="color"
           value={value}
           onChange={(e) => update(path, e.target.value.toUpperCase())}
-          className="h-11 w-14 cursor-pointer rounded-xl border border-black/15 bg-white p-1"
+          className="h-11 w-14 cursor-pointer rounded-xl border border-tinta/15 bg-white p-1"
         />
         <label htmlFor={textId} className="sr-only">
           {label} en hexadecimal
@@ -171,7 +171,7 @@ export function ColorField({ path, label, hint }: { path: string; label: string;
 /** Tarjeta de sección del editor. */
 export function Section({ title, description, children, actions }: { title: string; description?: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)] ring-1 ring-black/5 sm:p-6">
+    <section className="rounded-2xl bg-white p-5 shadow-[var(--shadow-card)] ring-1 ring-tinta/5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold">{title}</h2>

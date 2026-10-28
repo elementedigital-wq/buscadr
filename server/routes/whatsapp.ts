@@ -76,7 +76,9 @@ async function handleDecision(env: Env, origin: string, msg: Inbound) {
   await reply(
     env,
     msg.from,
-    accept ? `✅ Confirmaste la cita #${id} del ${formatLong(pro.start_ms)}. La verás en tu calendario: ${origin}/panel/agenda` : `Rechazaste la cita #${id}. Avisamos al paciente para que elija otro horario.`,
+    accept
+      ? `✅ Confirmaste la cita #${id} del ${formatLong(pro.start_ms)}. La verás en tu calendario: ${origin}/panel/agenda`
+      : `Rechazaste la cita #${id}. Avisamos al paciente para que elija otro horario.`,
   );
   await notifyPatient(
     env,
@@ -108,9 +110,23 @@ async function handleSearch(env: Env, origin: string, msg: Inbound) {
        ORDER BY demo ASC, CASE verification WHEN 'verificado' THEN 0 ELSE 1 END, id DESC LIMIT 3`,
     )
       .bind(...[...(specialty ? [specialty] : []), ...(city && !virtual ? [city.name] : [])])
-      .all<{ slug: string; title: string; display_name: string; specialty: string; city: string; sector: string; price_in_person_cents: number; price_virtual_cents: number; demo: number }>()
+      .all<{
+        slug: string;
+        title: string;
+        display_name: string;
+        specialty: string;
+        city: string;
+        sector: string;
+        price_in_person_cents: number;
+        price_virtual_cents: number;
+        demo: number;
+      }>()
   ).results;
-  const params = new URLSearchParams({ ...(specialty ? { especialidad: specialty } : { q: text.slice(0, 60) }), ...(city ? { ciudad: city.name } : {}), ...(virtual ? { modalidad: "virtual" } : {}) });
+  const params = new URLSearchParams({
+    ...(specialty ? { especialidad: specialty } : { q: text.slice(0, 60) }),
+    ...(city ? { ciudad: city.name } : {}),
+    ...(virtual ? { modalidad: "virtual" } : {}),
+  });
   if (!rows.length) {
     await env.DB.prepare("INSERT INTO demand_log(query,specialty,city,results) VALUES(?,?,?,0)")
       .bind(text.slice(0, 80), specialty ?? "", city?.name ?? "")
@@ -148,7 +164,12 @@ whatsapp.post("/webhook", async (c) => {
     const work = (async () => {
       if (msg.buttonId) await handleDecision(c.env, origin, msg);
       else if (msg.type === "text") await handleSearch(c.env, origin, msg);
-      else await reply(c.env, msg.from, "Por privacidad no recibimos imágenes ni documentos por WhatsApp. Escribe la especialidad que buscas o abre tus citas en buscaDR.");
+      else
+        await reply(
+          c.env,
+          msg.from,
+          "Por privacidad no recibimos imágenes ni documentos por WhatsApp. Escribe la especialidad que buscas o abre tus citas en buscaDR.",
+        );
     })().catch((e) => console.error("buscaDR WhatsApp", msg.type, (e as Error).message));
     c.executionCtx.waitUntil(work);
   }

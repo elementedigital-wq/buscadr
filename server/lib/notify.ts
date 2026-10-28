@@ -18,10 +18,23 @@ export const recipient = (db: D1Database, id: string) =>
 export async function notify(
   env: Env,
   to: Recipient,
-  n: { kind: string; title: string; body: string; link: string; whatsapp?: { template?: Outgoing; fallback?: Outgoing }; email?: boolean; appOnly?: boolean; ref?: string; origin?: string },
+  n: {
+    kind: string;
+    title: string;
+    body: string;
+    link: string;
+    whatsapp?: { template?: Outgoing; fallback?: Outgoing };
+    email?: boolean;
+    appOnly?: boolean;
+    ref?: string;
+    origin?: string;
+  },
 ) {
   const db = env.DB;
-  await db.prepare("INSERT INTO notifications(user_id,kind,title,body,link) VALUES(?,?,?,?,?)").bind(to.id, n.kind, n.title.slice(0, 140), n.body.slice(0, 600), n.link).run();
+  await db
+    .prepare("INSERT INTO notifications(user_id,kind,title,body,link) VALUES(?,?,?,?,?)")
+    .bind(to.id, n.kind, n.title.slice(0, 140), n.body.slice(0, 600), n.link)
+    .run();
   // Citas de prueba con perfiles de muestra: solo aviso dentro de la app (sin WhatsApp ni correo).
   if (n.appOnly) return;
   const tasks: Promise<unknown>[] = [];

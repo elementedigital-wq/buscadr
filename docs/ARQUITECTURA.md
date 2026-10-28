@@ -1,60 +1,52 @@
-# Arquitectura (v0.6)
+# Arquitectura de buscaDR
 
-## Vista general
+Directorio médico + SaaS de agenda para profesionales de la salud en Ecuador. Un Cloudflare Worker (`workers/app.ts`) atiende `/api/*` con Hono (`server/`) y el resto con React Router 8 + SSR (`app/`). Datos en D1 (`buscadr-db`), medios en D1 o R2.
 
 ```
-Navegador / WhatsApp ──► Worker buscadr (workers/app.ts)
-                          ├─ /api/*  → Hono (server/app.ts)
-                          │    auth · listings · me (portada) · me/listings · me/favorites · bookings · admin · cms · whatsapp · system
-                          ├─ resto   → React Router 8 SSR (app/)
-                          ├─ cron    → server/cron.ts (cada 30 min)
-                          └─ D1 DB (buscadr-db) · R2 MEDIA (opcional)
+Paciente ─┐                 ┌─ Hono API ── D1: users, practitioners, availability_*, appointments,
+Profesional ─ Worker buscadr ┤                  payments, notifications, cms_*, …
+Propietario ┘   (SSR + API)  └─ React Router SSR ── páginas públicas, panel, CMS
+          │                         │
+          ├─ WhatsApp Cloud API ◄───┤ notify(): app + WhatsApp + correo (Resend)
+          ├─ Payphone / sandbox ◄───┤ buscaDR Pay: libro de pagos
+          └─ Jitsi Meet (enlace) ◄──┘ teleconsulta
+Cron */30 → vence retenciones y pagos, planes, recordatorios 24 h / 1 h, limpieza
 ```
 
-Antes de cada request se aplican las migraciones pendientes (una por request, en transacción). Cabeceras de seguridad (CSP estricta, HSTS, `frame-ancestors 'none'` salvo la vista previa del CMS) en `workers/app.ts`.
-
-## Módulos del servidor (`server/`)
+## Módulos del servidor
 
 | Archivo | Responsabilidad |
 |---|---|
-| `lib/crypto.ts`, `lib/session.ts` | PBKDF2-SHA256 (100k) con verificación del formato v0.3 (240k) y actualización transparente; sesiones de 14 días en D1 (solo el hash SHA-256 del token) |
-| `lib/guards.ts`, `lib/rate-limit.ts` | Autorización y límites de intentos en D1 (login, registro, reservas, subidas, IA) |
-| `lib/catalog.ts` | 11 categorías, ciudades/sectores del piloto, equipos prohibidos (riesgo C) |
-| `lib/pricing.ts` | Combinación más barata de horas/días/semanas, tarifas, validación de fechas |
-| `lib/bookings.ts` | Máquina de estados, SQL de solapes, acciones disponibles por rol |
-| `lib/ranking.ts` | Puntaje del Documento Maestro |
-| `lib/whatsapp.ts`, `lib/ai.ts` | WhatsApp Cloud API y sugerencias con Claude |
-| `lib/media.ts` | Imágenes en D1 por trozos o R2, con validación de firma real |
-| `lib/owner.ts`, `lib/mail.ts` | Acceso del propietario (contraseña en D1, recuperación por enlace) y correo con Resend |
-| `routes/me.ts` | «Resumen buscaDR»: reserva activa, solicitudes por responder y progreso de la cuenta |
-| `cms/` | Modelo (iconos, tonos y fuentes validados), saneamiento por lista blanca y API del CMS |
+| `server/routes/practitioners.ts` | Directorio: búsqueda, filtros, orden, perfil público, disponibilidad por día y modalidad, favoritos |
+| `server/routes/appointments.ts` | Crear cita (atómica + idempotente), listar, detalle, `.ics`, mensajes y acciones (confirmar, rechazar, cancelar, reprogramar, completar, no asistió, marcar pagada, pagar, opinar) |
+| `server/routes/pro.ts` | Panel del profesional: perfil, foto, envío a verificación, horarios, bloqueos, calendario, resumen, ingresos (CSV) y plan |
+| `server/routes/payments.ts` | buscaDR Pay: pagos propios, checkout, sandbox, confirmación de Payphone |
+| `server/routes/me.ts` | Portada personalizada y notificaciones |
+| `server/routes/admin.ts` | KPIs, verificación, transacciones con reembolso, citas, opiniones |
+| `server/routes/whatsapp.ts` | Webhook firmado: botones Confirmar/Rechazar y búsqueda por chat |
+| `server/routes/auth.ts` | Registro (paciente/profesional), sesión, Google, preferencias, acceso del propietario, exportación de datos |
+| `server/cms/*` | CMS Maestro: modelo validado, versiones, medios, fuentes, búsqueda de íconos |
+| `server/lib/slots.ts` · `time.ts` | Horarios ofrecidos a partir de reglas semanales (UTC−5 fijo) |
+| `server/lib/appointments.ts` | Estados, transiciones, retención, SQL de solapes, sala de video, `.ics` |
+| `server/lib/payments.ts` · `settle.ts` | Proveedores de pago, liquidación y reembolso idempotentes |
+| `server/lib/notify.ts` · `whatsapp.ts` · `mail.ts` | Notificaciones multicanal con consentimiento |
+| `server/lib/practitioners.ts` | Vista pública (coordenadas aproximadas, registro enmascarado, sin dirección) y reputación |
 
-## Datos (D1)
+## Páginas
 
-`users`, `sessions`, `auth_attempts` (v0.3, intactas; `users` ampliada con columnas nuevas) · `listings`, `listing_photos`, `availability_blocks` · `bookings`, `booking_events`, `handovers`, `messages`, `reviews`, `incidents` · `favorites`, `demand_log`, `product_events`, `notification_log`, `whatsapp_inbound`, `consent_records`, `rate_limits` · `cms_*`, `media_*`.
+- **Públicas:** `/` (portada), `/buscar` (lista y mapa), `/especialidades`, `/doctor/:slug` (perfil + calendario de reserva), `/medicos/:ciudad/:especialidad` (landing SEO), `/para-profesionales`, `/planes`, `/como-funciona`, `/privacidad`.
+- **Paciente:** `/citas`, `/citas/:id` (estado, reprogramar, cancelar, chat, video, pago, opinión), `/pagar/:id`, `/favoritos`, `/notificaciones`, `/cuenta`.
+- **Profesional** (`/panel`, dashboard personalizado para médicos, especialistas, clínicas y servicios): resumen con KPIs y solicitudes, agenda semanal, detalle de cita, horarios y bloqueos, perfil y tarifas, ingresos, plan.
+- **Propietario:** `/admin` y `/maestro` (solo `elemente.digital@gmail.com`).
 
-La referencia PostGIS para búsquedas a escala está en `infrastructure/postgis/` (no se usa en el piloto: D1 + filtro por caja y distancia haversine bastan para miles de anuncios).
+## Seguridad y privacidad
 
-## Reservas
+- Sesión `__Host-buscadr_session` (HttpOnly, Secure, SameSite=Lax), contraseñas PBKDF2, límites de intentos, CSRF por cabecera `X-Requested-With: BUSCADR-WEB` + mismo origen, CSP estricta, entrada validada con Zod y listas blancas.
+- Datos de salud mínimos: motivo de consulta opcional, visible solo para las dos partes; los avisos no lo incluyen.
+- Ubicación pública aproximada (coordenadas redondeadas a ~1 km); dirección, teléfono y WhatsApp del consultorio solo con la cita confirmada.
+- Pagos sin datos completos de tarjeta en buscaDR; webhook de WhatsApp con HMAC; confirmación de Payphone servidor a servidor.
+- Exportación de datos (LOPDP) y registro de consentimientos.
 
-```
-solicitada ──accept──► confirmada ──pickup(código)──► en_curso ──return(código)──► devuelta ──complete/48 h──► completada
-    │ decline/vence 24 h        │ cancel                              │ incident                    │ incident
-    ▼                           ▼                                      ▼                             ▼
- rechazada / expirada        cancelada                             incidencia ◄──────────────────────┘
-```
+## Pruebas
 
-- **Anti doble reserva:** un único `INSERT … SELECT … WHERE NOT EXISTS(solape) AND NOT EXISTS(bloqueo)`. D1 serializa las escrituras, así que dos solicitudes simultáneas no pueden ganar ambas (prueba de concurrencia en `tests/api.test.ts`). El rango ocupado incluye el margen entre alquileres (`buffer_hours`).
-- **Idempotencia:** `UNIQUE(renter_id, idempotency_key)`.
-- **Retención:** una solicitud retiene el calendario 24 h (o hasta el inicio). La tarea programada la vence.
-- **Entrega y devolución:** quien alquila muestra el código de entrega y el propietario lo ingresa; al revés en la devolución. Se guardan checklist y fotos (`handovers`).
-- **Privacidad:** contacto y punto exacto solo con reserva confirmada; el chat oculta teléfonos y correos hasta entonces.
-- **Anuncios de muestra:** confirmación inmediata, quien alquila puede simular los pasos del propietario y sus reservas no ocupan el calendario.
-
-## Ranking
-
-`0,30 disponibilidad + 0,22 cercanía + 0,18 reputación (bayesiana) + 0,15 precio vs. mediana de la categoría + 0,10 fiabilidad (aceptación) + 0,05 calidad del anuncio`. «Destacado» (CMS) va primero y siempre se etiqueta.
-
-## Web (`app/`)
-
-Rutas: `/`, `/explorar`, `/categorias`, `/equipo/:slug`, `/equipo/:slug/reservar` (3 pasos, estado en la URL), `/alquiler/:ciudad/:categoria`, `/reservas`, `/reservas/:id`, `/publicar`, `/panel`, `/favoritos`, `/cuenta`, `/admin`, `/como-funciona`, `/maestro`, `/maestro/restablecer`, `/sitemap.xml`. Iconos: `app/components/Icon.tsx` sobre `app/lib/icon-data.ts` (Font Awesome Free). Los enlaces antiguos con `#/explorar` redirigen. Formularios de búsqueda GET (funcionan sin JS), mapa cargado solo en el navegador, PWA con service worker que nunca guarda HTML con datos personales.
+`npm test` (Vitest en workerd con D1 real): flujo completo de cita, 20 solicitudes concurrentes con un solo ganador, idempotencia, cita virtual con pago y reembolso, reprogramación y expiración, perfiles de muestra, WhatsApp, planes, administración, CMS y acceso del propietario. `npm run test:e2e` (navegador) y `npm run test:layout` (sin desbordes en 320–1440 px, incluidas todas las pestañas del CMS).

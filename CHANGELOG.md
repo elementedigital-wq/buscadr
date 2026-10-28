@@ -1,57 +1,34 @@
 # Cambios
 
-## 0.6.0 — 26-oct-2026 · Iteración UX/UI, iconografía, tipografías y acceso del propietario
+## 1.0.0 — 28-oct-2026 · Plataforma de citas médicas sobre Cloudflare Workers
 
-### Experiencia (inspirada en las referencias, con la línea visual buscaDR)
-- **Portada personalizada:** saludo por nombre y hora, «Resumen buscaDR» con lo más urgente (solicitudes por responder con tiempo restante, reserva próxima con su código, solicitud en espera o el mensaje del CMS), progreso «2 de 3 listo» con el siguiente paso, y seguimiento de la reserva activa.
-- Buscador «Describe lo que necesitas…» con **dictado por voz** (si el navegador lo permite) y sugerencias.
-- **Fila de categorías** con iconos en recuadros de tono suave y nueva página **/categorias** (tarjetas con icono, foto, «desde $X/día · N equipos» y «Más reservada» solo con datos reales).
-- **Explorar:** buscador con sugerencias, chips de categoría con icono, **filtros rápidos** (Disponible hoy, Reserva inmediata, Mejor valorados, Hasta $15/día, Con entrega), vista **Lista** (filas con foto, propietario, reputación, distancia, precio e insignias «Anuncio revisado» y «Ya lo alquilaste»), **Fotos** y **Mapa**, y «Pedir a la comunidad».
-- **Ficha:** cabecera con propietario e insignias, franja de disponibilidad («Disponible hoy» o próxima fecha libre), **tarifas seleccionables** (hora/día/semana), galería, compartir y barra fija con precio y «Reservar».
-- **Reserva en 3 pasos** (/equipo/:slug/reservar): 1 · Cuándo (días, horarios libres y duración), 2 · Detalles (entrega, mensaje, reglas), 3 · Confirmar (resumen, pago al retirar en el piloto y desglose). El estado vive en la URL y sobrevive al inicio de sesión.
-- **Detalle de la reserva:** tarjeta de seguimiento («Retiro mañana 09:00», barra de progreso, contraparte con chat y WhatsApp) y chat con burbujas y separadores por día.
-- **Navegación móvil flotante** con iconos editables; menú de cuenta con iconos.
+Reconstrucción completa de la demo estática a partir del Documento Maestro, la Estructura de Aplicación y el Brand Deck. Detalle de hallazgos en `docs/ANALISIS_2026.md`.
 
-### Iconografía y CMS
-- Iconos de **Font Awesome Free 7** (305, sólidos, de contorno y marcas) con selector por grupos y búsqueda en español, o imagen propia. Editables en categorías, menú, «Así funciona» y compromisos. Tonos de recuadro derivados de la paleta de marca.
-- **Tipografías:** además de Manrope e Inter, familias de **Google Fonts** (comprobadas) y **fuentes subidas** (WOFF2/WOFF/TTF/OTF con validación de firma).
-- Nuevos campos: saludo, Resumen buscaDR, fila de categorías, página de categorías, fotos por categoría e interruptores de la portada personalizada.
+### Pacientes
+- Portada con buscador (especialidad, nombre o síntoma · ciudad · modalidad), sugerencias, chips y tarjetas de especialidad con íconos, profesionales destacados, beneficios, «Así funciona», telemedicina y WhatsApp. Saludo y próxima cita con sesión iniciada.
+- Búsqueda con chips de especialidad, modalidad Presencial/Virtual, orden (recomendados, próximo horario, valoración, tarifa, cercanía), lista y mapa (ubicación aproximada) y registro de demanda no atendida.
+- Perfil del profesional: foto, insignias, experiencia, servicios, idiomas, tarifas presencial y virtual, ubicación aproximada, opiniones verificadas y **calendario de reserva** (tipo de atención con su precio, píldoras de día, horarios por Mañana/Tarde/Noche, pago en consultorio o en línea, motivo opcional, barra de resumen fija).
+- Mis citas: próximas y pasadas, detalle con progreso, reprogramar, cancelar (gratis hasta 4 h antes), chat, sala de video (15 min antes), código de llegada, dirección exacta solo confirmada, `.ics`, Google Calendar, WhatsApp, pagos e historial; opinión tras la cita.
+- Favoritos, notificaciones (campana) y cuenta con preferencias de WhatsApp y correo, invitaciones y exportación de datos.
 
-### Acceso del propietario
-- Solo `elemente.digital@gmail.com` (o `BUSCADR_ADMIN_EMAIL`) ve y abre el CMS y la administración; nadie puede registrarse ni entrar con Google con ese correo.
-- **Cambio de contraseña** desde el CMS (hash en D1; el secreto inicial deja de valer; se cierran las demás sesiones).
-- **Recuperación por correo** con enlace de un solo uso de 30 minutos (Resend, opcional). Migración `0006_acceso_propietario.sql`.
+### Profesionales, clínicas y servicios
+- Registro como profesional y **panel personalizado**: resumen con KPIs (citas de hoy, solicitudes, ingresos del mes, confirmación), solicitudes con confirmar/rechazar, agenda semanal (escritorio) o por día (móvil), detalle de cita, horarios por día y modalidad con duración, pausa y anticipación mínima, bloqueos, perfil (tipo, especialidad, foto, consultorio, idiomas, servicios, seguros), **tarifas diferenciadas presencial/virtual**, pago previo, confirmación automática, WhatsApp, ingresos con CSV y plan.
+- Envío a verificación; «Verificado» solo tras revisión del registro profesional.
+
+### Citas, pagos y notificaciones
+- Reserva atómica sin dobles reservas, idempotente, con retención que vence sola (24 h o 1 h antes; 30 min si el pago está pendiente). Estados con historial.
+- **buscaDR Pay**: libro de transacciones, checkout en la app (sandbox), adaptador Payphone, cobros en consultorio, reembolsos automáticos, comisión configurable (8 %), planes pagados en la app.
+- Notificaciones en la app, **WhatsApp con botones Confirmar/Rechazar** para el profesional y correo; recordatorios 24 h y 1 h antes.
+- Citas virtuales con sala de video propia por cita.
+
+### Propietario
+- `/admin`: KPIs del Documento Maestro, verificación de profesionales, transacciones con reembolso y CSV, citas y opiniones.
+- **CMS Maestro** (`/maestro`, solo `elemente.digital@gmail.com`): marca, tipografías (Google Fonts importadas o enlazadas, o subidas desde la computadora), íconos Font Awesome (catálogo + librería completa), portada, banners, textos, componentes, especialidades, profesionales destacados, biblioteca, SEO, permisos, opiniones, historial y **cambio y recuperación de contraseña por correo**.
 
 ### Calidad
-- Botones, chips y campos con relleno, alto táctil y texto que nunca sale del control. Corregidos desbordes en Explorar, tarjetas de categoría y CMS.
-- Nueva auditoría `npm run test:layout` (Playwright): sin desplazamiento horizontal ni texto fuera de botones, chips, campos o tarjetas en 8 anchos (320–1440 px), incluidas todas las pestañas del CMS.
-- 49 pruebas (acceso del propietario, fuentes, iconos, portada personalizada, filtros); prueba de humo con la reserva en 3 pasos.
-- Precios con coma decimal en todo el desglose; horas en formato 24 h.
+- Sistema visual del Brand Deck (Azul Confianza, Verde Salud, Azul Tecnología, Manrope + Inter), WCAG 2.2 AA, controles con relleno y alto táctil; rejillas que nunca ensanchan la página.
+- `npm run test:layout`: sin desbordes ni texto fuera de botones, chips, campos o tarjetas en 8 anchos (320–1440 px), como visitante, paciente, profesional y propietario (todas las pestañas del CMS).
+- 44 pruebas en workerd con D1 real (incluida la concurrencia de 20 solicitudes) y prueba de humo en navegador.
 
-## 0.5.0 — 26-oct-2026 · Marketplace operativo + CMS Maestro
-
-Reescritura completa sobre el mismo Worker (`buscadr`) y la misma D1 (`buscadr-db`). Cuentas, contraseñas y sesiones de la v0.3 siguen funcionando.
-
-### Producto y UX
-- Buscador «Qué · Dónde · Cuándo» con disponibilidad real, filtros, orden y mapa (ubicación aproximada).
-- Ficha con galería, reglas, reseñas reales, calendario ocupado y **precio total antes de reservar**; CTA fija en móvil.
-- Reservas reales y compartidas: solicitud (24 h) o inmediata, códigos de entrega y devolución, checklist y fotos, extensión, cancelación, incidencias, reseñas en ambos sentidos, chat con datos de contacto ocultos hasta confirmar.
-- Publicación guiada con asistente IA desde la foto, precios por hora/día/semana con sugerencia, bloqueos de calendario y revisión previa.
-- Panel del propietario, favoritos, «Mi cuenta» con WhatsApp, referidos y exportación de datos.
-- Landings SEO `/alquiler/{ciudad}/{categoria}`, `sitemap.xml`, JSON-LD, PWA.
-- Fotos del Brand Deck limpias (sin textos ni precios en euros incrustados); 11 anuncios de muestra etiquetados.
-
-### Operación
-- `/admin`: KPIs del Documento Maestro, moderación, incidencias, reservas, demanda no resuelta.
-- **CMS Maestro** `/maestro` con las mismas opciones que YANK (+ sección Anuncios).
-- WhatsApp Cloud API: avisos, aceptar/rechazar con botón, búsqueda por chat y publicar por foto.
-- Tarea programada cada 30 min (vencimientos, cierres, recordatorios, limpieza).
-
-### Técnico
-- Hono + React Router 8 SSR + TypeScript + Tailwind 4; migraciones D1 aditivas automáticas.
-- Anti doble reserva atómica, idempotencia, límites de intentos, CSP estricta, validación de firma real de imágenes.
-- 37 pruebas en workerd con D1 real + prueba de humo en navegador; CI en GitHub Actions.
-- Eliminados: SPA `app.js`, `localStorage` como base de datos, `wrangler*.toml` en conflicto, backend PostgreSQL no desplegado (referencia PostGIS en `infrastructure/`).
-
-## 0.3 — oct-2026
-Cuentas reales en D1 y Google; resto del producto como demostración local en el navegador.
+## 0.2 — oct-2026 · Demo estática
+- Directorio, búsqueda geográfica, dashboards de ejemplo y API local de pruebas (reemplazados por la 1.0).

@@ -72,7 +72,14 @@ export async function notifyNewRequest(env: Env, origin: string, a: AppointmentL
 }
 
 /** Aviso al paciente de un cambio de estado de su cita (confirmación, rechazo, cancelación…). */
-export async function notifyPatient(env: Env, origin: string, a: { id: number; patient_id: string; start_ms: number; name: string; demo: number }, kind: string, title: string, body?: string) {
+export async function notifyPatient(
+  env: Env,
+  origin: string,
+  a: { id: number; patient_id: string; start_ms: number; name: string; demo: number },
+  kind: string,
+  title: string,
+  body?: string,
+) {
   const patient = await recipient(env.DB, a.patient_id);
   if (!patient) return;
   await notify(env, patient, {
@@ -98,7 +105,11 @@ export async function settlePayment(env: Env, origin: string, payment: PaymentRo
         .bind(result.status === "pendiente" ? "pendiente" : result.status, (result.error ?? "").slice(0, 200), payment.id),
       paymentEvent(db, payment.id, "no_aprobado", { status: result.status }),
       ...(payment.appointment_id && result.status !== "pendiente"
-        ? [db.prepare("UPDATE appointments SET payment_status='fallido',updated_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='pendiente'").bind(payment.appointment_id)]
+        ? [
+            db
+              .prepare("UPDATE appointments SET payment_status='fallido',updated_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='pendiente'")
+              .bind(payment.appointment_id),
+          ]
         : []),
     ]);
     await track(db, "payment_failed", { userId: payment.payer_id, appointmentId: payment.appointment_id, props: { provider: payment.provider } });
@@ -112,17 +123,26 @@ export async function settlePayment(env: Env, origin: string, payment: PaymentRo
     .run();
   if (!res.meta.changes) return "aprobado";
   await paymentEvent(db, payment.id, "aprobado", { provider: payment.provider }).run();
-  await track(db, "payment_approved", { userId: payment.payer_id, appointmentId: payment.appointment_id, props: { kind: payment.kind, amount: payment.amount_cents } });
+  await track(db, "payment_approved", {
+    userId: payment.payer_id,
+    appointmentId: payment.appointment_id,
+    props: { kind: payment.kind, amount: payment.amount_cents },
+  });
 
   if (payment.kind === "plan" && payment.plan && payment.practitioner_id) {
     const now = Date.now();
-    const current = await db.prepare("SELECT plan_until_ms FROM practitioners WHERE id=?").bind(payment.practitioner_id).first<{ plan_until_ms: number | null }>();
+    const current = await db
+      .prepare("SELECT plan_until_ms FROM practitioners WHERE id=?")
+      .bind(payment.practitioner_id)
+      .first<{ plan_until_ms: number | null }>();
     const start = Math.max(now, current?.plan_until_ms ?? 0);
     await db.batch([
       db
         .prepare("INSERT INTO subscriptions(practitioner_id,plan,status,amount_cents,period_start_ms,period_end_ms,payment_id) VALUES(?,?,'activa',?,?,?,?)")
         .bind(payment.practitioner_id, payment.plan, payment.amount_cents, start, start + PLAN_PERIOD_MS, payment.id),
-      db.prepare("UPDATE practitioners SET plan=?,plan_until_ms=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(payment.plan, start + PLAN_PERIOD_MS, payment.practitioner_id),
+      db
+        .prepare("UPDATE practitioners SET plan=?,plan_until_ms=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .bind(payment.plan, start + PLAN_PERIOD_MS, payment.practitioner_id),
     ]);
     await track(db, "subscription_activated", { userId: payment.payer_id, practitionerId: payment.practitioner_id, props: { plan: payment.plan } });
     const payer = await recipient(db, payment.payer_id);
@@ -158,9 +178,18 @@ export async function settlePayment(env: Env, origin: string, payment: PaymentRo
            WHERE id=?3`,
         )
         .bind(confirm ? 1 : 0, holdUntil(now, a.start_ms), a.id),
-      db.prepare("INSERT INTO appointment_events(appointment_id,type,actor_id,detail) VALUES(?,?,?,?)").bind(a.id, "pago_aprobado", payment.payer_id, JSON.stringify({ payment: payment.id })),
+      db
+        .prepare("INSERT INTO appointment_events(appointment_id,type,actor_id,detail) VALUES(?,?,?,?)")
+        .bind(a.id, "pago_aprobado", payment.payer_id, JSON.stringify({ payment: payment.id })),
     ]);
-    await notifyPatient(env, origin, a, "pago_aprobado", confirm ? "Pago aprobado y cita confirmada" : "Pago aprobado", `${money(payment.amount_cents)} · ${a.name}. ${confirm ? STATUS_LABEL.confirmada : "Esperando la confirmación del profesional"}.`);
+    await notifyPatient(
+      env,
+      origin,
+      a,
+      "pago_aprobado",
+      confirm ? "Pago aprobado y cita confirmada" : "Pago aprobado",
+      `${money(payment.amount_cents)} · ${a.name}. ${confirm ? STATUS_LABEL.confirmada : "Esperando la confirmación del profesional"}.`,
+    );
     if (a.status === "solicitada") await notifyNewRequest(env, origin, a, confirm);
   }
   return "aprobado";
@@ -176,9 +205,13 @@ export async function refundPayment(env: Env, payment: PaymentRow, reason: strin
     return false;
   }
   await db.batch([
-    db.prepare("UPDATE payments SET status='reembolsado',refunded_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='aprobado'").bind(nowText(), payment.id),
+    db
+      .prepare("UPDATE payments SET status='reembolsado',refunded_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='aprobado'")
+      .bind(nowText(), payment.id),
     paymentEvent(db, payment.id, "reembolsado", { reason: reason.slice(0, 160) }),
-    ...(payment.appointment_id ? [db.prepare("UPDATE appointments SET payment_status='reembolsado',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(payment.appointment_id)] : []),
+    ...(payment.appointment_id
+      ? [db.prepare("UPDATE appointments SET payment_status='reembolsado',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(payment.appointment_id)]
+      : []),
   ]);
   await track(db, "payment_refunded", { userId: payment.payer_id, appointmentId: payment.appointment_id });
   return true;

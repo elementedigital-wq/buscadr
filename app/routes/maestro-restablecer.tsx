@@ -52,7 +52,7 @@ export default function Restablecer() {
         <button type="submit" className="btn-primary w-full" disabled={busy || !token || password.length < 12}>
           {busy ? <Spinner label="Guardando" /> : <Icon name="lock" className="size-4" />} Guardar y entrar al CMS
         </button>
-        <Link to="/maestro" className="block text-sm font-semibold text-morado">
+        <Link to="/maestro" className="block text-sm font-semibold text-azul">
           ← Volver al acceso
         </Link>
       </form>

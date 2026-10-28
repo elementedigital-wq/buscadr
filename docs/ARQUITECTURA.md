@@ -47,6 +47,10 @@ Cron */30 → vence retenciones y pagos, planes, recordatorios 24 h / 1 h, limpi
 - Pagos sin datos completos de tarjeta en buscaDR; webhook de WhatsApp con HMAC; confirmación de Payphone servidor a servidor.
 - Exportación de datos (LOPDP) y registro de consentimientos.
 
+## Observabilidad
+
+Cada respuesta de la API lleva `X-Request-Id` (el `cf-ray` de Cloudflare si existe) y `Server-Timing: app;dur=…`. Los errores devuelven `request_id` en el JSON y los errores internos se registran como una línea JSON (`buscadr_api_error`) sin cuerpo ni datos personales: con el código que ve la persona se encuentra el registro exacto en Workers Logs. Los `429` incluyen `Retry-After`.
+
 ## Pruebas
 
-`npm test` (Vitest en workerd con D1 real): flujo completo de cita, 20 solicitudes concurrentes con un solo ganador, idempotencia, cita virtual con pago y reembolso, reprogramación y expiración, perfiles de muestra, WhatsApp, planes, administración, CMS y acceso del propietario. `npm run test:e2e` (navegador) y `npm run test:layout` (sin desbordes en 320–1440 px, incluidas todas las pestañas del CMS).
+`npm test` (Vitest en workerd con D1 real): flujo completo de cita, 20 solicitudes concurrentes con un solo ganador, idempotencia, cita virtual con pago y reembolso, reprogramación y expiración, perfiles de muestra, WhatsApp, planes, administración, CMS y acceso del propietario. `npm run test:e2e` (navegador, incluido conservar el horario elegido al registrarse), `npm run test:layout` (sin desbordes ni texto aplastado en 320–1440 px, incluidas todas las pestañas del CMS) y `npm run test:a11y` (axe-core, WCAG 2.2 AA, sin infracciones graves).

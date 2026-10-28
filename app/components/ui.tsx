@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router";
-import { initials } from "../lib/format";
+import { dayParts, hhmm, initials, toLocalDate } from "../lib/format";
 import { Icon } from "./Icon";
 
 export function Avatar({ name, photo, size = 48, rounded = "full" }: { name: string; photo?: string | null; size?: number; rounded?: "full" | "xl" }) {
@@ -22,7 +22,7 @@ export function Avatar({ name, photo, size = 48, rounded = "full" }: { name: str
     <span
       aria-hidden
       style={{ ...style, fontSize: Math.max(12, size / 2.8) }}
-      className={`grid shrink-0 place-items-center ${shape} bg-celeste font-display font-bold text-azul ring-2 ring-white`}
+      className={`grid shrink-0 place-items-center ${shape} bg-celeste font-display font-bold text-azul-ink ring-2 ring-white`}
     >
       {initials(name.replace(/^(Dra?\.|Lic\.|Psic\.|Od\.|Nut\.|Ft\.)\s+/i, ""))}
     </span>
@@ -75,7 +75,7 @@ export function EmptyState({ title, children, action, icon = "stethoscope" }: { 
 export function Notice({ tone = "info", title, children }: { tone?: "info" | "warning" | "success" | "danger"; title?: string; children: ReactNode }) {
   const tones = {
     info: "bg-celeste/70 ring-azul/15",
-    warning: "bg-[#fef9c3] ring-amarillo/70",
+    warning: "bg-amarillo/20 ring-amarillo/70",
     success: "bg-menta/70 ring-verde/40",
     danger: "bg-alerta/5 ring-alerta/30",
   } as const;
@@ -94,22 +94,22 @@ export function Notice({ tone = "info", title, children }: { tone?: "info" | "wa
 }
 
 const STATUS_TONE: Record<string, string> = {
-  solicitada: "bg-[#fef9c3] text-tinta",
-  confirmada: "bg-menta text-[#065f46]",
-  completada: "bg-celeste text-azul",
+  solicitada: "bg-amarillo/20 text-tinta",
+  confirmada: "bg-menta text-verde-ink",
+  completada: "bg-celeste text-azul-ink",
   cancelada: "bg-gris-claro text-gris",
   rechazada: "bg-gris-claro text-gris",
   expirada: "bg-gris-claro text-gris",
   no_asistio: "bg-alerta/10 text-alerta-ink",
-  pendiente: "bg-[#fef9c3] text-tinta",
-  pagado: "bg-menta text-[#065f46]",
-  aprobado: "bg-menta text-[#065f46]",
+  pendiente: "bg-amarillo/20 text-tinta",
+  pagado: "bg-menta text-verde-ink",
+  aprobado: "bg-menta text-verde-ink",
   rechazado: "bg-alerta/10 text-alerta-ink",
-  reembolsado: "bg-celeste text-azul",
+  reembolsado: "bg-celeste text-azul-ink",
   cancelado: "bg-gris-claro text-gris",
   creado: "bg-gris-claro text-tinta",
-  active: "bg-menta text-[#065f46]",
-  review: "bg-[#fef9c3] text-tinta",
+  active: "bg-menta text-verde-ink",
+  review: "bg-amarillo/20 text-tinta",
   draft: "bg-gris-claro text-tinta",
   paused: "bg-gris-claro text-gris",
   rejected: "bg-alerta/10 text-alerta-ink",
@@ -150,13 +150,13 @@ export function Spinner({ label = "Cargando" }: { label?: string }) {
 
 /** Rótulo obligatorio de los perfiles de muestra (no se puede ocultar desde el CMS). */
 export function DemoBadge({ className = "" }: { className?: string }) {
-  return <span className={`chip bg-[#fef9c3] px-2.5 py-0.5 text-xs font-semibold text-tinta ring-1 ring-amarillo ${className}`}>Perfil de muestra</span>;
+  return <span className={`chip bg-amarillo/20 px-2.5 py-0.5 text-xs font-semibold text-tinta ring-1 ring-amarillo ${className}`}>Perfil de muestra</span>;
 }
 
 /** Sello de verificación manual de credenciales (nunca en perfiles de muestra). */
 export function VerifiedBadge({ className = "" }: { className?: string }) {
   return (
-    <span className={`chip bg-menta px-2.5 py-0.5 text-xs font-semibold text-[#065f46] ${className}`} title="Credenciales revisadas por buscaDR">
+    <span className={`chip bg-menta px-2.5 py-0.5 text-xs font-semibold text-verde-ink ${className}`} title="Credenciales revisadas por buscaDR">
       <Icon name="circle-check" className="size-3.5" /> Verificado
     </span>
   );
@@ -232,5 +232,21 @@ export function Stat({
         {hint && <p className="truncate text-xs muted">{hint}</p>}
       </div>
     </div>
+  );
+}
+
+/** Fecha de una cita en formato «boleto»: día de la semana, número y hora (lectura rápida en listas). */
+export function DateTicket({ ms, muted = false }: { ms: number; muted?: boolean }) {
+  const parts = dayParts(toLocalDate(ms));
+  return (
+    <span
+      className={`flex w-16 shrink-0 flex-col items-center rounded-2xl px-1 py-2 text-center leading-none ${muted ? "bg-gris-claro text-tinta" : "tone-azul"}`}
+    >
+      <span className="text-[11px] font-semibold uppercase">
+        {parts.weekday} · {parts.month}
+      </span>
+      <span className="mt-1 font-display text-2xl font-extrabold">{parts.day}</span>
+      <span className="mt-1 text-xs font-bold">{hhmm(ms)}</span>
+    </span>
   );
 }

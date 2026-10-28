@@ -18,10 +18,7 @@ export const meta: Route.MetaFunction = () => [
 const ROLE_LABEL: Record<SessionUser["role"], string> = { patient: "Paciente", pro: "Profesional de la salud" };
 
 function errorText(e: unknown) {
-  if (e instanceof ApiError) {
-    if (e.status === 429) return "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.";
-    return e.message;
-  }
+  if (e instanceof ApiError) return e.message;
   return "No se pudo completar la acción. Inténtalo de nuevo.";
 }
 
@@ -45,6 +42,13 @@ function AuthView() {
       <PageHeader eyebrow="Tu cuenta buscaDR" title={tab === "login" ? "Entra a tu cuenta" : "Crea tu cuenta"}>
         Una sola cuenta para reservar citas y, si eres profesional de la salud, para gestionar tu agenda.
       </PageHeader>
+      {params.get("motivo") === "reservar" && (
+        <div className="mb-5">
+          <Notice tone="info" title="Un paso más para confirmar tu cita">
+            Entra o crea tu cuenta gratis. Guardamos el horario que elegiste y volverás a él para confirmarlo.
+          </Notice>
+        </div>
+      )}
       <div role="tablist" aria-label="Acceso" className="mb-6 inline-flex max-w-full rounded-full bg-white p-1 ring-1 ring-tinta/10">
         {(
           [
@@ -413,7 +417,7 @@ function AccountView({ user }: { user: SessionUser }) {
           </h2>
           <p className="truncate text-sm muted">{user.email}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <span className="chip tone-azul">{user.cms ? "Propietario de buscaDR" : ROLE_LABEL[user.role]}</span>
           <span className="chip bg-gris-claro">
             <Icon name="pin" className="size-4" /> {user.city}

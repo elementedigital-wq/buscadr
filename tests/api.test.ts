@@ -34,6 +34,27 @@ describe("sistema", () => {
     expect(cat.data.plans.map((p: { id: string }) => p.id)).toEqual(["free", "agenda", "pro", "growth", "clinic"]);
     expect(cat.data.fee_bps).toBe(800);
   });
+
+  it("cada respuesta lleva identificador de solicitud y tiempo de servidor; los errores lo incluyen", async () => {
+    const ok = await new Browser().get("/api/catalog");
+    expect(ok.headers.get("x-request-id")).toMatch(/^[\w-]{8,}$/);
+    expect(ok.headers.get("server-timing")).toMatch(/^app;dur=\d+$/);
+    const missing = await new Browser().get("/api/no-existe");
+    expect(missing.status).toBe(404);
+    expect(missing.data.code).toBe("NOT_FOUND");
+    const bad = await new Browser().post("/api/auth/register", { email: "x" });
+    expect(bad.status).toBe(400);
+    expect(bad.data.request_id).toBe(bad.headers.get("x-request-id"));
+  });
+
+  it("al superar el límite de intentos responde 429 con Retry-After y el tiempo de espera", async () => {
+    const b = new Browser();
+    let last = await b.post("/api/auth/login", { email: "nadie@test.ec", password: "x" });
+    for (let i = 0; i < 40 && last.status !== 429; i++) last = await b.post("/api/auth/login", { email: "nadie@test.ec", password: "x" });
+    expect(last.status).toBe(429);
+    expect(Number(last.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(last.data.error).toMatch(/minutos?/);
+  });
 });
 
 describe("directorio y búsqueda", () => {

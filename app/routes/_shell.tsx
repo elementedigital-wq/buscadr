@@ -123,9 +123,12 @@ export default function Shell() {
       >
         Saltar al contenido
       </a>
-      <div className="bg-tinta px-4 py-1.5 text-center text-xs text-white">
-        <span data-cms="copy.emergencyNotice">{cms?.copy.emergencyNotice ?? "buscaDR no atiende emergencias. Ante una urgencia llama al 911."}</span>
-      </div>
+      <aside aria-label="Aviso de emergencias" className="bg-tinta px-4 py-1.5 text-center text-xs text-white">
+        <span data-cms="copy.emergencyNotice">{cms?.copy.emergencyNotice ?? "buscaDR no atiende emergencias. Ante una urgencia llama al 911."}</span>{" "}
+        <a href="tel:911" className="font-bold whitespace-nowrap underline underline-offset-2">
+          Llamar al 911
+        </a>
+      </aside>
       <header className="sticky top-0 z-30 border-b border-tinta/5 bg-white/90 backdrop-blur">
         <div className="container-page flex h-16 items-center gap-3">
           <Link to="/" className="flex shrink-0 items-center" aria-label="buscaDR, inicio">
@@ -145,7 +148,7 @@ export default function Shell() {
                 to={l.to}
                 data-cms={l.cmsPath}
                 className={({ isActive }) =>
-                  `rounded-full px-3 py-2 text-sm font-semibold ${isActive ? "bg-celeste text-azul" : "text-tinta hover:bg-tinta/5"}`
+                  `rounded-full px-3 py-2 text-sm font-semibold ${isActive ? "bg-celeste text-azul-ink" : "text-tinta hover:bg-tinta/5"}`
                 }
               >
                 {l.label}

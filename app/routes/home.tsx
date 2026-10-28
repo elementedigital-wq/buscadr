@@ -56,13 +56,13 @@ function NextAppointment({ next }: { next: Next & { when: string } }) {
   return (
     <section className="container-page mt-6" aria-labelledby="proxima">
       <div className="bg-brand relative overflow-hidden rounded-[var(--radius-card)] p-4 text-white shadow-[var(--shadow-float)] sm:p-6">
-        <div className="relative flex flex-wrap items-center gap-4">
+        <div className="relative grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
           <Avatar name={next.name} photo={next.photo} size={64} rounded="xl" />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <p id="proxima" className="text-xs font-bold tracking-[0.14em] text-white/85 uppercase">
               Tu próxima cita
             </p>
-            <p className="font-display text-xl font-extrabold">{next.name}</p>
+            <p className="font-display text-xl font-extrabold break-words">{next.name}</p>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/90">
               <span className="inline-flex items-center gap-1.5">
                 <Icon name="calendar" className="size-4" /> {next.when}
@@ -72,9 +72,9 @@ function NextAppointment({ next }: { next: Next & { when: string } }) {
               </span>
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="col-span-2 flex flex-wrap items-center gap-2 sm:col-span-1">
             <StatusBadge status={next.status} label={next.status_label} />
-            <Link to={`/citas/${next.id}`} className="btn btn-sm bg-white text-azul hover:bg-celeste">
+            <Link to={`/citas/${next.id}`} className="btn btn-sm bg-white text-azul-ink hover:bg-celeste">
               Ver detalles <Icon name="arrow" className="size-4" />
             </Link>
           </div>
@@ -304,7 +304,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </article>
         {cms.layout.showWhatsapp && (
           <article className="card flex flex-col gap-4 overflow-hidden p-6 sm:flex-row sm:items-center" data-cms="home.whatsappTitle">
-            <span className="grid size-16 shrink-0 place-items-center rounded-3xl bg-[#dcfce7] text-[#15803d]">
+            <span className="grid size-16 shrink-0 place-items-center rounded-3xl tone-verde">
               <Icon name="whatsapp" className="size-8" />
             </span>
             <div className="min-w-0">

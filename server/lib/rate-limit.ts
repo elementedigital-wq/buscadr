@@ -20,6 +20,16 @@ export const RULES = {
   payment: { limit: 30, windowMs: 60 * 60_000, blockMs: 30 * 60_000 },
 } satisfies Record<string, Rule>;
 
+const limited = (ms: number) => {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  return new HttpError(
+    429,
+    `Demasiados intentos. Inténtalo de nuevo en ${minutes} ${minutes === 1 ? "minuto" : "minutos"}.`,
+    "RATE_LIMITED",
+    Math.ceil(ms / 1000),
+  );
+};
+
 /**
  * Ventana fija persistida en D1. Se cuenta antes de ejecutar la acción;
  * `reset` se llama tras un éxito para no penalizar a usuarios legítimos.
@@ -29,9 +39,7 @@ export async function hit(db: D1Database, key: string, rule: Rule, now = Date.no
     .prepare("SELECT hits,window_start,blocked_until FROM rate_limits WHERE key=?")
     .bind(key)
     .first<{ hits: number; window_start: number; blocked_until: number }>();
-  if (row && row.blocked_until > now) {
-    throw new HttpError(429, "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", "RATE_LIMITED");
-  }
+  if (row && row.blocked_until > now) throw limited(row.blocked_until - now);
   const fresh = !row || now - row.window_start > rule.windowMs;
   const hits = fresh ? 1 : row.hits + 1;
   const blockedUntil = hits > rule.limit ? now + rule.blockMs : 0;
@@ -42,7 +50,7 @@ export async function hit(db: D1Database, key: string, rule: Rule, now = Date.no
     )
     .bind(key, hits, fresh ? now : row.window_start, blockedUntil)
     .run();
-  if (blockedUntil) throw new HttpError(429, "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.", "RATE_LIMITED");
+  if (blockedUntil) throw limited(rule.blockMs);
 }
 
 export async function reset(db: D1Database, key: string) {

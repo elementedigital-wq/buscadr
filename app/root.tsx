@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useRouteLoaderData } from "react-router";
+import { useEffect, useState } from "react";
+import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useNavigation, useRouteLoaderData } from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { IconLibraryContext } from "./components/Icon";
@@ -69,7 +69,33 @@ export default function App() {
     if (import.meta.env.PROD && "serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
   }, []);
   useEffect(() => notifyPreviewNavigation(location.pathname + location.search), [location.pathname, location.search]);
-  return <Outlet />;
+  return (
+    <>
+      <NavigationProgress />
+      <Outlet />
+    </>
+  );
+}
+
+/**
+ * Barra de progreso al cambiar de página: el SSR espera los datos del servidor antes de mostrar la
+ * nueva página, y sin aviso visual un toque parece no haber funcionado. Aparece tras 150 ms para no
+ * parpadear en navegaciones rápidas.
+ */
+function NavigationProgress() {
+  const navigation = useNavigation();
+  const busy = navigation.state !== "idle";
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    if (!busy) return setVisible(false);
+    const t = setTimeout(() => setVisible(true), 150);
+    return () => clearTimeout(t);
+  }, [busy]);
+  return (
+    <div role="progressbar" aria-label="Cargando la página" aria-hidden={!visible} className={`nav-progress ${visible ? "is-active" : ""}`}>
+      <span />
+    </div>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

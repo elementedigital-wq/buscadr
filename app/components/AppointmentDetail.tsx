@@ -284,20 +284,20 @@ export function AppointmentDetail({ a, fresh = false }: { a: AppointmentView; fr
           </Notice>
         )}
         <section className="card overflow-hidden">
-          <div className="flex flex-wrap items-center gap-4 p-5">
+          <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-4 p-5">
             {isPro ? <Avatar name={a.patient.name} size={64} /> : <Avatar name={a.practitioner.name} photo={a.practitioner.photo} size={64} rounded="xl" />}
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0">
               <p className="text-xs font-semibold tracking-wide uppercase muted">Cita #{a.id}</p>
-              <h1 className="text-2xl leading-tight font-extrabold">{isPro ? a.patient.name : a.practitioner.name}</h1>
-              {!isPro && (
-                <Link to={`/doctor/${a.practitioner.slug}`} className="text-sm font-semibold text-azul">
-                  Ver perfil
-                </Link>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              <StatusBadge status={a.status} label={a.status_label} />
-              {a.demo && <DemoBadge />}
+              <h1 className="text-2xl leading-tight font-extrabold break-words">{isPro ? a.patient.name : a.practitioner.name}</h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <StatusBadge status={a.status} label={a.status_label} />
+                {a.demo && <DemoBadge />}
+                {!isPro && (
+                  <Link to={`/doctor/${a.practitioner.slug}`} className="ml-1 text-sm font-semibold text-azul-ink underline-offset-2 hover:underline">
+                    Ver perfil
+                  </Link>
+                )}
+              </div>
             </div>
           </div>
           <div className="px-5">

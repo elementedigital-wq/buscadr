@@ -2,7 +2,7 @@
 
 Directorio médico y plataforma de citas para Ecuador: pacientes encuentran médicos, especialistas, clínicas y servicios de salud, comparan tarifas **presenciales y virtuales** y agendan en un calendario que el profesional confirma. Cada profesional tiene su **panel de citas**, avisos por **WhatsApp** y cobros registrados con **buscaDR Pay**. Piloto en Guayaquil, Samborondón, Daule, Quito y Cuenca.
 
-> v1.0 (28-oct-2026): reconstrucción completa sobre Cloudflare Workers + D1. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
+> v1.1 (28-oct-2026): reconstrucción sobre Cloudflare Workers + D1 y una iteración de buenas prácticas UX/UI, accesibilidad, rendimiento y observabilidad. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
 
 ## Qué incluye
 
@@ -31,6 +31,7 @@ npm test                         # pruebas en workerd con D1 real
 npm run check                    # wrangler sincronizado + tipos + lint + pruebas + build
 BASE_URL=http://localhost:5173 npm run test:e2e     # prueba de humo en navegador (Playwright)
 BASE_URL=http://localhost:5173 npm run test:layout  # sin desbordes en 8 anchos (320–1440 px)
+BASE_URL=http://localhost:5173 npm run test:a11y    # accesibilidad WCAG 2.2 AA (axe-core)
 ```
 
 ## Documentación

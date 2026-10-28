@@ -90,47 +90,51 @@ export default function Doctor({ loaderData }: Route.ComponentProps) {
           </Notice>
         </div>
       )}
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-        <div className="min-w-0 space-y-6">
-          <section className="card overflow-hidden">
-            <div className="surface-hero grid gap-5 p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:p-6">
-              <div className="mx-auto sm:mx-0">
-                <Avatar name={p.name} photo={p.photo} size={136} rounded="xl" />
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr]">
+        <section className="card min-w-0 overflow-hidden lg:col-start-1 lg:row-start-1">
+          <div className="surface-hero grid gap-5 p-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:p-6">
+            <div className="mx-auto sm:mx-0">
+              <Avatar name={p.name} photo={p.photo} size={136} rounded="xl" />
+            </div>
+            <div className="min-w-0 text-center sm:text-left">
+              <div className="flex flex-wrap justify-center gap-1.5 sm:justify-start">
+                {(cms?.layout.showBadges ?? true) && p.verified && <VerifiedBadge />}
+                {p.demo && <DemoBadge />}
+                <span className="chip bg-white px-2.5 py-0.5 text-xs font-semibold text-azul ring-1 ring-azul/15">{p.kind_label}</span>
               </div>
-              <div className="min-w-0 text-center sm:text-left">
-                <div className="flex flex-wrap justify-center gap-1.5 sm:justify-start">
-                  {(cms?.layout.showBadges ?? true) && p.verified && <VerifiedBadge />}
-                  {p.demo && <DemoBadge />}
-                  <span className="chip bg-white px-2.5 py-0.5 text-xs font-semibold text-azul ring-1 ring-azul/15">{p.kind_label}</span>
-                </div>
-                <h1 className="mt-2 text-3xl leading-tight font-extrabold sm:text-4xl">{p.name}</h1>
-                <p className="mt-1 text-lg font-semibold text-azul">
-                  {p.specialty_name}
-                  {p.subspecialty ? <span className="font-normal muted"> · {p.subspecialty}</span> : null}
-                </p>
-                {p.headline && <p className="mt-1 muted">{p.headline}</p>}
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
-                  <Rating p={p} />
-                  <ModalityChips p={p} />
-                </div>
+              <h1 className="mt-2 text-3xl leading-tight font-extrabold sm:text-4xl">{p.name}</h1>
+              <p className="mt-1 text-lg font-semibold text-azul">
+                {p.specialty_name}
+                {p.subspecialty ? <span className="font-normal muted"> · {p.subspecialty}</span> : null}
+              </p>
+              {p.headline && <p className="mt-1 muted">{p.headline}</p>}
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+                <Rating p={p} />
+                <ModalityChips p={p} />
               </div>
             </div>
-            <dl className="grid grid-cols-3 divide-x divide-tinta/5 border-t border-tinta/5 text-center">
-              <div className="p-4">
-                <dt className="text-xs muted">Experiencia</dt>
-                <dd className="font-display text-lg font-extrabold">{p.years_experience ? `${p.years_experience} años` : "—"}</dd>
-              </div>
-              <div className="p-4">
-                <dt className="text-xs muted">Pacientes en buscaDR</dt>
-                <dd className="font-display text-lg font-extrabold">{p.patients || "—"}</dd>
-              </div>
-              <div className="p-4">
-                <dt className="text-xs muted">Valoración</dt>
-                <dd className="font-display text-lg font-extrabold">{p.rating ? p.rating.toFixed(1) : "Nuevo"}</dd>
-              </div>
-            </dl>
-          </section>
+          </div>
+          <dl className="grid grid-cols-3 divide-x divide-tinta/5 border-t border-tinta/5 text-center">
+            <div className="p-4">
+              <dt className="text-xs muted">Experiencia</dt>
+              <dd className="font-display text-lg font-extrabold">{p.years_experience ? `${p.years_experience} años` : "—"}</dd>
+            </div>
+            <div className="p-4">
+              <dt className="text-xs muted">Pacientes en buscaDR</dt>
+              <dd className="font-display text-lg font-extrabold">{p.patients || "—"}</dd>
+            </div>
+            <div className="p-4">
+              <dt className="text-xs muted">Valoración</dt>
+              <dd className="font-display text-lg font-extrabold">{p.rating ? p.rating.toFixed(1) : "Nuevo"}</dd>
+            </div>
+          </dl>
+        </section>
 
+        {/* En el celular la agenda va justo después de la cabecera; en escritorio, columna fija a la derecha. */}
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start" aria-label="Reservar">
+          <BookingCalendar p={p} loggedIn={!!root?.user} bookLabel={cms?.buttons.book} />
+        </aside>
+        <div className="min-w-0 space-y-6 lg:col-start-1 lg:row-start-2">
           <section className="card p-5 sm:p-6" aria-labelledby="sobre">
             <h2 id="sobre" className="text-xl font-extrabold">
               Sobre {p.kind === "clinica" ? "el centro" : "el profesional"}
@@ -149,34 +153,31 @@ export default function Doctor({ loaderData }: Route.ComponentProps) {
               </>
             )}
             <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-              <div className="flex gap-2">
-                <Icon name="globe" className="mt-0.5 size-4 text-azul" />
-                <div>
-                  <dt className="font-semibold">Idiomas</dt>
-                  <dd className="muted">{p.languages}</dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-2 font-semibold">
+                  <Icon name="globe" className="size-4 text-azul" /> Idiomas
+                </dt>
+                <dd className="pl-6 muted">{p.languages}</dd>
               </div>
               {p.insurances && (
-                <div className="flex gap-2">
-                  <Icon name="shield" className="mt-0.5 size-4 text-azul" />
-                  <div>
-                    <dt className="font-semibold">Seguros y convenios</dt>
-                    <dd className="muted">{p.insurances}</dd>
-                  </div>
+                <div>
+                  <dt className="flex items-center gap-2 font-semibold">
+                    <Icon name="shield" className="size-4 text-azul" /> Seguros y convenios
+                  </dt>
+                  <dd className="pl-6 muted">{p.insurances}</dd>
                 </div>
               )}
-              <div className="flex gap-2">
-                <Icon name="regular:id-card" className="mt-0.5 size-4 text-azul" />
-                <div>
-                  <dt className="font-semibold">Registro profesional</dt>
-                  <dd className="muted">
-                    {p.verified
-                      ? `Verificado por buscaDR${p.verified_at ? ` el ${dateTime(p.verified_at).split(",")[0]}` : ""} (${p.license_hint})`
-                      : p.demo
-                        ? "Perfil ilustrativo"
-                        : "En verificación"}
-                  </dd>
-                </div>
+              <div>
+                <dt className="flex items-center gap-2 font-semibold">
+                  <Icon name="regular:id-card" className="size-4 text-azul" /> Registro profesional
+                </dt>
+                <dd className="pl-6 muted">
+                  {p.verified
+                    ? `Verificado por buscaDR${p.verified_at ? ` el ${dateTime(p.verified_at).split(",")[0]}` : ""} (${p.license_hint})`
+                    : p.demo
+                      ? "Perfil ilustrativo"
+                      : "En verificación"}
+                </dd>
               </div>
             </dl>
           </section>
@@ -284,9 +285,6 @@ export default function Doctor({ loaderData }: Route.ComponentProps) {
             )}
           </section>
         </div>
-        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start" aria-label="Reservar">
-          <BookingCalendar p={p} loggedIn={!!root?.user} bookLabel={cms?.buttons.book} />
-        </aside>
       </div>
     </div>
   );

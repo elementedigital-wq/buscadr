@@ -3,7 +3,7 @@ import { money } from "../lib/format";
 import type { PublicPractitioner } from "../lib/types";
 
 /**
- * Mapa con Leaflet + OpenStreetMap. Se carga solo en el navegador. Privacidad: cada consultorio es un
+ * Mapa con Leaflet + OpenStreetMap. Se carga solo en el navegador y al hacerse visible. Privacidad: cada consultorio es un
  * círculo aproximado (~1 km); la dirección exacta solo se muestra al paciente con su cita confirmada.
  */
 export default function PractitionersMap({
@@ -24,7 +24,7 @@ export default function PractitionersMap({
     const items = latest.current;
     let map: import("leaflet").Map | undefined;
     let cancelled = false;
-    (async () => {
+    const start = async () => {
       const L = (await import("leaflet")).default;
       await import("leaflet/dist/leaflet.css");
       if (cancelled || !el.current) return;
@@ -56,9 +56,22 @@ export default function PractitionersMap({
         bounds.extend([p.lat, p.lng]);
       }
       if (items.length) map.fitBounds(bounds.pad(0.2), { maxZoom: 14, animate: false });
-    })();
+    };
+    // Leaflet y las teselas se descargan solo cuando el mapa es visible (oculto en móvil, o más abajo
+    // en el perfil): ahorra ~1 MB en la primera carga de /buscar en el celular.
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          void start();
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    if (el.current) io.observe(el.current);
     return () => {
       cancelled = true;
+      io.disconnect();
       map?.stop();
       map?.remove();
     };

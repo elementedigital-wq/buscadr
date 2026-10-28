@@ -23,6 +23,10 @@ const NO_SESSION = new Set(["/api/ping", "/api/health", "/api/cms/setup", "/api/
 export const api = new Hono<AppBindings>().basePath("/api");
 
 api.use("*", async (c, next) => {
+  // Identificador de la solicitud (el de Cloudflare si existe): va en la respuesta y en los registros,
+  // para encontrar en los logs el error exacto que reporta una persona.
+  const started = Date.now();
+  c.set("requestId", c.req.header("cf-ray")?.split("-")[0] ?? crypto.randomUUID().slice(0, 16));
   c.set("ip", c.req.header("cf-connecting-ip") ?? c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? "local");
   const path = c.req.path;
   const webhook = path === "/api/whatsapp/webhook";
@@ -37,6 +41,8 @@ api.use("*", async (c, next) => {
   await next();
   c.header("Cache-Control", c.res.headers.get("Cache-Control") ?? "no-store");
   c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Request-Id", c.get("requestId"));
+  c.header("Server-Timing", `app;dur=${Date.now() - started}`);
 });
 
 api.route("/", system);
@@ -51,10 +57,24 @@ api.route("/admin", admin);
 api.route("/cms", cms);
 api.route("/whatsapp", whatsapp);
 
-api.notFound((c) => c.json({ error: "Endpoint no encontrado", code: "NOT_FOUND" }, 404));
+api.notFound((c) => c.json({ error: "Endpoint no encontrado", code: "NOT_FOUND", request_id: c.get("requestId") }, 404));
 
 api.onError((error, c) => {
-  if (error instanceof HttpError) return c.json({ error: error.message, ...(error.code ? { code: error.code } : {}) }, error.status as 400);
-  console.error("buscaDR API error", c.req.method, c.req.path, error);
-  return c.json({ error: "Error interno del servicio. Inténtalo de nuevo.", code: "INTERNAL" }, 500);
+  const requestId = c.get("requestId") ?? "";
+  c.header("X-Request-Id", requestId);
+  if (error instanceof HttpError) {
+    if (error.retryAfter) c.header("Retry-After", String(error.retryAfter));
+    return c.json({ error: error.message, ...(error.code ? { code: error.code } : {}), request_id: requestId }, error.status as 400);
+  }
+  // Registro estructurado (Workers Logs): sin cuerpo de la solicitud ni datos personales.
+  console.error(
+    JSON.stringify({
+      event: "buscadr_api_error",
+      request_id: requestId,
+      method: c.req.method,
+      path: c.req.path,
+      message: String((error as Error)?.message ?? error),
+    }),
+  );
+  return c.json({ error: `Error interno del servicio. Inténtalo de nuevo (código ${requestId}).`, code: "INTERNAL", request_id: requestId }, 500);
 });

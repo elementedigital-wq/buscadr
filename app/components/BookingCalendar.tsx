@@ -4,7 +4,7 @@
  * vuelve a validar de forma atómica al confirmar.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { type ApiError, api } from "../lib/api";
 import { addDays, dayParts, money, timeOf, toLocalDate } from "../lib/format";
 import type { PublicPractitioner, Slot } from "../lib/types";
@@ -22,8 +22,20 @@ const groupOf = (ms: number) => {
 export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p: PublicPractitioner; loggedIn: boolean; bookLabel?: string }) {
   const navigate = useNavigate();
   const today = toLocalDate(Date.now());
-  const [modality, setModality] = useState<Modality>(p.in_person ? "presencial" : "virtual");
-  const [from, setFrom] = useState(today);
+  const [params] = useSearchParams();
+  // Horario elegido antes de iniciar sesión (vuelve en la URL: ?modalidad=…&hora=…): se restaura.
+  const wanted = useRef<number | null>(Number(params.get("hora")) > Date.now() ? Number(params.get("hora")) : null);
+  const wantedModality = params.get("modalidad");
+  const [modality, setModality] = useState<Modality>(
+    wantedModality === "virtual" && p.virtual
+      ? "virtual"
+      : wantedModality === "presencial" && p.in_person
+        ? "presencial"
+        : p.in_person
+          ? "presencial"
+          : "virtual",
+  );
+  const [from, setFrom] = useState(() => (wanted.current ? toLocalDate(wanted.current) : today));
   const [days, setDays] = useState<Day[] | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
@@ -45,6 +57,8 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
         if (cancelled) return;
         setDays(r.days);
         const first = r.days.find((d) => d.slots.length);
+        const restore = wanted.current ? r.days.find((d) => d.slots.some((s) => s.start_ms === wanted.current)) : undefined;
+        if (restore) return setDate(restore.date);
         setDate((prev) => (prev && r.days.some((d) => d.date === prev && d.slots.length) ? prev : (first?.date ?? r.days[0]?.date ?? null)));
       })
       .catch(() => !cancelled && setDays([]));
@@ -53,8 +67,15 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
     };
   }, [p.slug, from, modality]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: al cambiar de día o modalidad se descarta el horario elegido
-  useEffect(() => setSlot(null), [date, modality]);
+  // Al cambiar de día o modalidad se descarta el horario elegido (salvo el que se restaura tras iniciar sesión).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: la modalidad cambia los horarios ofrecidos aunque no se lea aquí
+  useEffect(() => {
+    const w = wanted.current;
+    if (w && days?.some((d) => d.date === date && d.slots.some((s) => s.start_ms === w))) {
+      setSlot(w);
+      wanted.current = null;
+    } else setSlot(null);
+  }, [date, modality, days]);
 
   const daySlots = useMemo(() => days?.find((d) => d.date === date)?.slots ?? [], [days, date]);
   const groups = useMemo(() => {
@@ -66,7 +87,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
   async function book() {
     if (!slot) return;
     if (!loggedIn) {
-      navigate(`/cuenta?next=${encodeURIComponent(`/doctor/${p.slug}`)}&motivo=reservar`);
+      navigate(`/cuenta?next=${encodeURIComponent(`/doctor/${p.slug}?modalidad=${modality}&hora=${slot}#reservar`)}&motivo=reservar`);
       return;
     }
     setBusy(true);
@@ -83,8 +104,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
       setError((e as ApiError).message);
       if ((e as ApiError).code === "BOOKING_SLOT_TAKEN") {
         key.current = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
-        setFrom((f) => f);
-        setDays((d) => d && d.map((x) => ({ ...x, slots: x.slots.filter((s) => s.start_ms !== slot) })));
+        setDays((d) => d?.map((x) => ({ ...x, slots: x.slots.filter((s) => s.start_ms !== slot) })) ?? null);
         setSlot(null);
       }
     } finally {
@@ -118,7 +138,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
                     <Icon name={m === "presencial" ? "clinic" : "video"} className="size-4" />
                     {m === "presencial" ? "Presencial" : "Virtual"}
                   </span>
-                  <span className="text-xs font-medium opacity-90">{enabled ? (cents ? money(cents) : "Consultar") : "No disponible"}</span>
+                  <span className="text-xs font-medium">{enabled ? (cents ? money(cents) : "Consultar") : "No disponible"}</span>
                 </button>
               );
             })}
@@ -208,7 +228,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
             ].map(([v, title, hint]) => (
               <label
                 key={String(v)}
-                className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-2xl p-3 ring-1 ${payOnline === v ? "bg-celeste/60 ring-azul" : "bg-white ring-tinta/10"}`}
+                className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-2xl p-3 ring-1 ${payOnline === v ? "bg-white ring-2 ring-azul" : "bg-white ring-tinta/10"}`}
               >
                 <input
                   type="radio"

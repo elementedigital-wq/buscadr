@@ -65,5 +65,5 @@ export type User = {
 
 export type AppBindings = {
   Bindings: Env;
-  Variables: { user: User | null; ip: string };
+  Variables: { user: User | null; ip: string; requestId: string };
 };

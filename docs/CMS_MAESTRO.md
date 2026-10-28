@@ -2,6 +2,15 @@
 
 El mismo CMS de Yank y Tull, adaptado al directorio médico buscaDR: vista previa en vivo, clic para editar, borrador/publicación con historial, biblioteca de imágenes y fuentes, íconos Font Awesome editables y avisos de afirmaciones y contraste.
 
+## Primer acceso, paso a paso
+
+1. **Contraseña inicial (una sola vez):** Cloudflare → Workers & Pages → `buscadr` → Settings → Variables and Secrets → **Add** → tipo **Secret**, nombre `BUSCADR_ADMIN_PASSWORD`, valor = tu contraseña (12+ caracteres) → **Deploy**. (Desde una terminal: `npx wrangler secret put BUSCADR_ADMIN_PASSWORD`.) Nunca la escribas en el repositorio.
+2. **Que esté publicado:** el código debe estar en `main` (Cloudflare lo despliega solo). Comprueba `https://<tu-url>/api/health` → `adminConfigured: true`.
+3. **Entrar:** abre `https://<tu-url>/maestro` (o «Entrar» en `/cuenta`: con el correo del propietario te lleva directo al CMS). Correo `elemente.digital@gmail.com` + la contraseña del paso 1.
+4. **Cambiar la contraseña:** CMS → Operación → **Acceso y contraseña**. Desde ese momento vale la nueva (guardada como hash en D1) y el secreto deja de usarse.
+5. **Activar la recuperación por correo:** crea el secreto `RESEND_API_KEY` (ver «Correo de recuperación»). Luego, en `/maestro`, «¿Olvidaste tu contraseña?» envía un enlace de 30 minutos a tu correo.
+6. Con la sesión iniciada verás en el menú de tu cuenta los accesos **CMS Maestro** y **Administración**; ninguna otra cuenta los ve.
+
 ## Acceso (solo el propietario)
 
 - `https://<tu-dominio>/maestro` (también desde el menú de la cuenta del propietario y desde `/admin`).

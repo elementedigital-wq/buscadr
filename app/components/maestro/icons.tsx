@@ -235,7 +235,7 @@ export function IconChooser({ value, onChange, label, id }: { value: string; onC
   const { config, update } = useEditor();
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-celeste text-azul">
+      <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-celeste text-azul-ink">
         <CmsIcon value={value} className="size-5" />
       </span>
       <button id={id} type="button" className="btn-outline btn-sm shrink-0" onClick={() => setOpen(true)} aria-label={`${label}: cambiar ícono`}>

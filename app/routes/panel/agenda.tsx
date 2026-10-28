@@ -39,7 +39,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 }
 
 const COLOR: Record<string, string> = {
-  solicitada: "bg-[#fef9c3] ring-amarillo text-tinta",
+  solicitada: "bg-amarillo/20 ring-amarillo text-tinta",
   confirmada: "bg-azul ring-azul text-white",
   completada: "bg-menta ring-verde/50 text-[#065f46]",
   no_asistio: "bg-alerta/10 ring-alerta/40 text-alerta-ink",
@@ -113,16 +113,18 @@ export default function Agenda({ loaderData: cal }: Route.ComponentProps) {
           {error && <p className="mt-1 text-sm text-alerta-ink">{error}</p>}
           <ul className="mt-2 grid gap-2 md:grid-cols-2">
             {pending.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center gap-2 rounded-2xl bg-[#fef9c3]/70 p-3">
-                <span className="min-w-0 flex-1 text-sm">
+              <li key={a.id} className="grid gap-2 rounded-2xl bg-amarillo/15 p-3 ring-1 ring-amarillo/40 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                <span className="min-w-0 text-sm break-words">
                   <strong>{a.patient_name}</strong> · {WEEKDAYS_SHORT[new Date(a.start_ms - 5 * 3_600_000).getUTCDay()]} {timeOf(a.start_ms)} · {a.modality}
                 </span>
-                <button type="button" className="btn-accent btn-sm min-h-9" onClick={() => act(a.id, "confirm")}>
-                  Confirmar
-                </button>
-                <button type="button" className="btn-danger btn-sm min-h-9" onClick={() => act(a.id, "decline")}>
-                  Rechazar
-                </button>
+                <span className="flex flex-wrap gap-2">
+                  <button type="button" className="btn-accent btn-sm min-h-9" onClick={() => act(a.id, "confirm")}>
+                    Confirmar
+                  </button>
+                  <button type="button" className="btn-danger btn-sm min-h-9" onClick={() => act(a.id, "decline")}>
+                    Rechazar
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
@@ -131,7 +133,7 @@ export default function Agenda({ loaderData: cal }: Route.ComponentProps) {
 
       <ul className="flex flex-wrap gap-3 text-xs" aria-label="Leyenda">
         {[
-          ["bg-[#fef9c3] ring-amarillo", "Por confirmar"],
+          ["bg-amarillo/20 ring-amarillo", "Por confirmar"],
           ["bg-azul ring-azul", "Confirmada"],
           ["bg-menta ring-verde/50", "Atendida"],
           ["bg-tinta/10 ring-tinta/10", "Bloqueado"],

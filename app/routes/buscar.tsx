@@ -138,7 +138,10 @@ export default function Buscar({ loaderData }: Route.ComponentProps) {
       </div>
 
       <div className={`mt-5 grid gap-5 ${(cms?.layout.showMap ?? true) ? "lg:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]" : ""}`}>
-        <section aria-label="Resultados" className={view === "mapa" ? "hidden lg:block" : ""}>
+        <section aria-labelledby="resultados" className={view === "mapa" ? "hidden lg:block" : ""}>
+          <h2 id="resultados" className="sr-only">
+            Resultados
+          </h2>
           {items.length ? (
             <ul className="grid gap-3">
               {items.slice(0, cms?.layout.searchCount ?? 36).map((p) => (

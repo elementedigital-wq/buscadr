@@ -1,6 +1,6 @@
 {
   "name": "buscadr",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "buscaDR: directorio médico y SaaS de agenda para profesionales y clínicas de Ecuador. Citas presenciales y virtuales, pagos registrados en la app, WhatsApp y CMS Maestro. Cloudflare Workers + D1, API Hono y web React Router con SSR.",
@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:e2e": "node e2e/smoke.mjs",
     "test:layout": "node e2e/layout-audit.mjs",
+    "test:a11y": "node e2e/a11y-audit.mjs",
     "db:migrate:local": "wrangler d1 migrations apply buscadr-db --local -c wrangler.app.jsonc",
     "db:migrate:remote": "wrangler d1 migrations apply buscadr-db --remote",
     "deploy": "npm run build && wrangler deploy",
@@ -53,6 +54,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitest/runner": "^4.1.12",
     "@vitest/snapshot": "^4.1.12",
+    "axe-core": "^4.10.3",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^8.3.5",

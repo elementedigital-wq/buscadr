@@ -18,7 +18,7 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - R2 `MEDIA` opcional (sin R2 las imágenes y fuentes van a D1).
 - Secretos solo en Cloudflare: `BUSCADR_ADMIN_PASSWORD` (contraseña inicial del propietario), `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID`.
 - Propietario del CMS: `elemente.digital@gmail.com` (`server/lib/owner.ts`, ADR 0008). Solo esa cuenta ve y usa `/maestro` y `/admin` (`cms: true` en `/api/auth/me`).
-- Comandos: `npm run dev`, `npm test`, `npm run check`, `npm run test:e2e`, `npm run test:layout` (sin desbordes en 320–1440 px), `npm run icons`.
+- Comandos: `npm run dev`, `npm test`, `npm run check`, `npm run test:e2e`, `npm run test:layout` (sin desbordes ni texto aplastado en 320–1440 px), `npm run test:a11y` (axe, WCAG 2.2 AA), `npm run icons`.
 
 ## Reglas no negociables
 - Preservar cuentas, sesiones (`__Host-buscadr_session`), citas, pagos y datos D1. Nunca `DROP`, `DELETE` masivo, renombrar ni cambiar tipos en migraciones.
@@ -28,6 +28,6 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - Salud: sin promesas clínicas ni diagnósticos; aviso de emergencias (911) siempre visible; motivo de consulta solo para las dos partes y nunca en avisos de WhatsApp o correo.
 - Ubicación pública siempre aproximada; dirección exacta y contacto solo con cita confirmada.
 - Sin secretos ni contraseñas en Git, commits, logs ni documentos (tampoco la del propietario).
-- Botones, chips y campos con relleno y texto que no sale del control: `npm run test:layout` debe pasar tras cambios de interfaz.
-- WCAG 2.2 AA (verde y celeste solo como fondo o con su versión «ink» para texto), mobile-first, OWASP, LOPDP.
+- Botones, chips y campos con relleno y texto que no sale del control: `npm run test:layout` y `npm run test:a11y` deben pasar tras cambios de interfaz.
+- WCAG 2.2 AA (verde y celeste solo como fondo o con su versión «ink» para texto; azul sobre celeste con `text-azul-ink`), mobile-first, OWASP, LOPDP.
 - Documentar decisiones en `docs/adr/` y cambios en `CHANGELOG.md`.

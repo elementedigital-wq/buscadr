@@ -61,7 +61,7 @@ export default function Resumen({ loaderData: d }: Route.ComponentProps) {
           <p className="mt-1 text-sm text-white/85">Este es el resumen de tu consultorio hoy.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link to="/panel/agenda" className="btn btn-sm bg-white text-azul hover:bg-celeste">
+          <Link to="/panel/agenda" className="btn btn-sm bg-white text-azul-ink hover:bg-celeste">
             <Icon name="agenda" className="size-4" /> Abrir agenda
           </Link>
           <Link to="/panel/horarios" className="btn btn-sm text-white ring-1 ring-white/50 hover:bg-white/10">
@@ -121,15 +121,15 @@ export default function Resumen({ loaderData: d }: Route.ComponentProps) {
           {error && <p className="mt-2 text-sm text-alerta-ink">{error}</p>}
           <ul className="mt-3 divide-y divide-tinta/5">
             {pending.map((u) => (
-              <li key={u.id} className="flex flex-wrap items-center gap-3 py-3">
+              <li key={u.id} className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto]">
                 <Avatar name={u.patient_name} size={44} />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{u.patient_name}</p>
+                <div className="min-w-0">
+                  <p className="font-semibold break-words">{u.patient_name}</p>
                   <p className="text-sm muted">
                     {u.when} · {u.modality === "virtual" ? "Virtual" : "Presencial"}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1">
                   <button type="button" className="btn-accent btn-sm" onClick={() => act(u.id, "confirm")}>
                     Confirmar
                   </button>
@@ -160,18 +160,23 @@ export default function Resumen({ loaderData: d }: Route.ComponentProps) {
             <ul className="mt-3 divide-y divide-tinta/5">
               {d.upcoming.map((u) => (
                 <li key={u.id}>
-                  <Link to={`/panel/citas/${u.id}`} className="flex flex-wrap items-center gap-3 py-3 hover:bg-fondo">
-                    <span className="w-16 shrink-0 font-display text-lg font-extrabold">{timeOf(u.start_ms)}</span>
-                    <span className="min-w-0 flex-1">
+                  <Link
+                    to={`/panel/citas/${u.id}`}
+                    className="grid grid-cols-[4rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 py-3 hover:bg-fondo sm:grid-cols-[4rem_minmax(0,1fr)_auto]"
+                  >
+                    <span className="font-display text-lg font-extrabold">{timeOf(u.start_ms)}</span>
+                    <span className="min-w-0">
                       <span className="block truncate font-semibold">{u.patient_name}</span>
                       <span className="block text-xs muted">
                         {u.when} · {u.modality === "virtual" ? "Virtual" : "Presencial"}
                       </span>
                     </span>
-                    <StatusBadge
-                      status={u.payment_status === "pendiente" ? "pendiente" : u.status}
-                      label={u.payment_status === "pendiente" ? "Esperando pago" : u.status_label}
-                    />
+                    <span className="col-start-2 sm:col-start-auto">
+                      <StatusBadge
+                        status={u.payment_status === "pendiente" ? "pendiente" : u.status}
+                        label={u.payment_status === "pendiente" ? "Esperando pago" : u.status_label}
+                      />
+                    </span>
                   </Link>
                 </li>
               ))}

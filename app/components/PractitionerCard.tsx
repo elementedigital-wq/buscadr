@@ -18,7 +18,7 @@ export function priceFrom(p: Pick<PublicPractitioner, "in_person" | "virtual" | 
 }
 
 export function Rating({ p, compact = false }: { p: Pick<PublicPractitioner, "rating" | "reviews">; compact?: boolean }) {
-  if (p.rating == null || !p.reviews) return <span className="chip bg-celeste px-2 py-0.5 text-xs font-semibold text-azul">Nuevo en buscaDR</span>;
+  if (p.rating == null || !p.reviews) return <span className="chip bg-celeste px-2 py-0.5 text-xs font-semibold text-azul-ink">Nuevo en buscaDR</span>;
   return (
     <span className="inline-flex min-w-0 items-center gap-1.5 text-sm">
       {compact ? <Icon name="star" className="size-4 text-[#f5b301]" /> : <Stars value={p.rating} />}
@@ -39,7 +39,7 @@ export function ModalityChips({ p }: { p: Pick<PublicPractitioner, "in_person" |
         </span>
       )}
       {p.virtual && (
-        <span className="chip bg-menta px-2 py-0.5 text-xs font-semibold text-[#065f46]">
+        <span className="chip bg-menta px-2 py-0.5 text-xs font-semibold text-verde-ink">
           <Icon name="video" className="size-3" /> Virtual
         </span>
       )}
@@ -56,7 +56,11 @@ export function PractitionerCard({ p, cms, layout = "row" }: { p: Card; cms?: Cm
   if (layout === "tile")
     return (
       <article className="card group relative flex h-full flex-col overflow-hidden" data-cms={`practitioners.${p.id}`}>
-        <Link to={href} className="relative block aspect-[4/3] overflow-hidden bg-celeste">
+        <Link
+          to={href}
+          aria-label={`Ver perfil de ${p.name}${p.featured ? " (destacado)" : ""}${p.demo ? " (perfil de muestra)" : ""}`}
+          className="relative block aspect-[4/3] overflow-hidden bg-celeste"
+        >
           {p.photo ? (
             <img src={p.photo} alt={`Foto de ${p.name}`} loading="lazy" className="size-full object-cover object-top transition group-hover:scale-[1.03]" />
           ) : (

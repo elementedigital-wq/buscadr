@@ -84,6 +84,20 @@ function audit() {
     }
     return false;
   };
+  // 5. Texto aplastado: una columna flexible que quedó tan angosta que el texto se parte en sílabas
+  //    o palabras sueltas (p. ej. un nombre reducido a «I» junto a insignias que no se encogen).
+  for (const el of document.querySelectorAll("p, h1, h2, h3, h4, dd, dt, li, a, strong, span")) {
+    if (!visible(el) || el.closest("svg, [aria-hidden='true'], .sr-only")) continue;
+    const text = (el.innerText || "").trim();
+    if (text.length < 8 || el.children.length > 3) continue;
+    const st = getComputedStyle(el);
+    const fs = Number.parseFloat(st.fontSize) || 16;
+    const lh = Number.parseFloat(st.lineHeight) || fs * 1.4;
+    const r = el.getBoundingClientRect();
+    const longest = Math.max(...text.split(/\s+/).map((w) => w.length));
+    if (r.width < Math.min(longest, 6) * fs * 0.5 && r.height > lh * 1.8) issues.push(`texto aplastado (${Math.round(r.width)}px): ${label(el)}`);
+    else if (st.textOverflow === "ellipsis" && r.width < fs * 2.5) issues.push(`texto recortado casi por completo (${Math.round(r.width)}px): ${label(el)}`);
+  }
   if (document.documentElement.scrollWidth > vw + 1) issues.push(`la página se desplaza en horizontal (${document.documentElement.scrollWidth}px > ${vw}px)`);
 
   const controls = document.querySelectorAll("button, a, input, select, textarea, label, .chip, [class*='btn'], [class*='card']");
@@ -161,7 +175,7 @@ async function setupAccounts() {
   const page = await ctx.newPage();
   await page.goto(base);
   const stamp = Date.now();
-  const out = await page.evaluate(async (stamp) => {
+  const out = await page.evaluate(async ([stamp, admin]) => {
     const h = { "Content-Type": "application/json", "X-Requested-With": "BUSCADR-WEB" };
     const call = (method, path, body) => fetch(path, { method, headers: h, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
     const weekday = (minDays, hour) => {
@@ -174,18 +188,31 @@ async function setupAccounts() {
     // Profesional con perfil en borrador (panel completo).
     const pro = `layout-pro-${stamp}@test.ec`;
     await call("POST", "/api/auth/register", { name: "Dra. Prueba Maquetación", email: pro, password: "contrasena-prueba-123", role: "pro", acceptTerms: true, phone: "0991234567", whatsapp_opt_in: true });
-    await call("POST", "/api/pro/me", { title: "Dra.", display_name: "Prueba Maquetación Con Un Nombre Bastante Largo", specialty: "pediatria", city: "Guayaquil", sector: "Urdesa" });
-    await call("PATCH", "/api/pro/me", { bio: "Pediatra con experiencia.", price_in_person_cents: 4000, price_virtual_cents: 3000, virtual_enabled: true, address: "Av. Principal 123" });
+    const created = await call("POST", "/api/pro/me", { title: "Dra.", display_name: "Prueba Maquetación Con Un Nombre Bastante Largo", specialty: "pediatria", city: "Guayaquil", sector: "Urdesa" });
+    await call("PATCH", "/api/pro/me", { bio: "Pediatra con experiencia.", license_number: "ACESS-000000", price_in_person_cents: 4000, price_virtual_cents: 3000, virtual_enabled: true, address: "Av. Principal 123" });
+    await call("POST", "/api/pro/me/submit");
     await call("POST", "/api/auth/logout");
+    // Con credenciales del propietario se publica el perfil de prueba para auditar el panel con solicitudes reales.
+    const proId = created?.practitioner?.id;
+    if (admin.email && admin.password && proId) {
+      await call("POST", "/api/auth/login", admin);
+      await call("POST", `/api/admin/practitioners/${proId}/review`, { decision: "approve" });
+      await call("POST", "/api/auth/logout");
+    }
     // Paciente con una cita presencial (perfil de muestra: se confirma sola) y una virtual con pago pendiente.
     const patient = `layout-pac-${stamp}@test.ec`;
-    await call("POST", "/api/auth/register", { name: "Paciente Maquetación", email: patient, password: "contrasena-prueba-123", role: "patient", acceptTerms: true });
+    await call("POST", "/api/auth/register", { name: "María Fernanda Villavicencio Altamirano", email: patient, password: "contrasena-prueba-123", role: "patient", acceptTerms: true });
     const a = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(2, 10), modality: "presencial", idempotency_key: key(), reason: "Control general y revisión de exámenes de laboratorio recientes." });
     if (a.id) await call("POST", `/api/appointments/${a.id}/messages`, { body: "Hola doctor, ¿debo llevar los exámenes impresos o basta con el PDF en el celular?" });
     const v = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
     await call("PUT", "/api/me/favorites/4");
-    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout };
-  }, stamp);
+    let proAppointment = null;
+    if (admin.email && proId) {
+      proAppointment = (await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(2, 11), modality: "presencial", idempotency_key: key(), reason: "Control de niño sano" })).id;
+      await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(3, 9), modality: "presencial", idempotency_key: key() });
+    }
+    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout, proAppointment };
+  }, [stamp, { email: process.env.ADMIN_EMAIL ?? "", password: process.env.ADMIN_PASSWORD ?? "" }]);
   await ctx.close();
   return out;
 }
@@ -199,7 +226,7 @@ try {
     ...(acc.virtual ? [`/citas/${acc.virtual}`] : []),
     ...(acc.checkout?.startsWith("/") ? [acc.checkout] : []),
   ]);
-  await run("profesional", login(acc.pro, "contrasena-prueba-123"), PRO);
+  await run("profesional", login(acc.pro, "contrasena-prueba-123"), [...PRO, ...(acc.proAppointment ? [`/panel/citas/${acc.proAppointment}`] : [])]);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) await run("propietario", login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD), ["/maestro", "/admin"]);
 } finally {
   await browser.close();

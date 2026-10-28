@@ -185,7 +185,7 @@ export default function Pagar({ loaderData }: Route.ComponentProps) {
                     placeholder="0000 0000 0000 0000"
                   />
                   {brandOf(number.replace(/\s/g, "")) && (
-                    <span className="absolute top-1/2 right-2 -translate-y-1/2 chip bg-celeste px-2 py-0.5 text-xs font-bold text-azul">
+                    <span className="absolute top-1/2 right-2 -translate-y-1/2 chip bg-celeste px-2 py-0.5 text-xs font-bold text-azul-ink">
                       {brandOf(number.replace(/\s/g, ""))}
                     </span>
                   )}

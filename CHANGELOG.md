@@ -1,5 +1,33 @@
 # Cambios
 
+## 1.1.0 — 28-oct-2026 · Iteración de buenas prácticas UX/UI (front end y back end)
+
+Basada en auditorías automáticas (axe-core WCAG 2.2 AA, maquetación en 8 anchos y métricas de carga) y revisión visual en móvil.
+
+### Experiencia
+- **Perfil del profesional:** en el celular, la agenda aparece justo después de la cabecera (antes estaba ~3.000 px más abajo, después del mapa y las opiniones). En escritorio sigue fija a la derecha.
+- **El horario elegido se conserva al iniciar sesión o registrarse:** quien elige día y hora sin cuenta vuelve al perfil con su horario seleccionado y un aviso «Un paso más para confirmar tu cita».
+- **Mis citas:** nueva tarjeta con fecha tipo «boleto» (día, número y hora), profesional, especialidad, modalidad, tarifa e insignias. Corrige el nombre del profesional que se reducía a una letra en móviles.
+- Cabecera del detalle de cita y tarjeta de «Mi cuenta» sin columnas aplastadas.
+- **Barra de progreso** al cambiar de página (respeta «reducir movimiento»).
+- Aviso de emergencias con enlace directo **«Llamar al 911»**.
+- Mensajes de límite de intentos con el tiempo exacto de espera.
+
+### Rendimiento
+- `/buscar` en el celular: de **1.332 KB a 218 KB** (el mapa y sus teselas se cargan solo cuando el mapa es visible).
+- `/maestro`: la pantalla de acceso pasa de **645 KB a 218 KB**; el editor se descarga solo después de entrar como propietario.
+
+### Accesibilidad (WCAG 2.2 AA)
+- Azul de marca más oscuro («ink», derivado de la paleta) para texto pequeño sobre fondos celestes (4,35:1 → ≥ 4,5:1); barra lateral del CMS en Azul Profundo.
+- Aviso de emergencias como región (`aside`), jerarquía de títulos en la búsqueda y lista de definiciones válida en el perfil.
+- Nuevo `npm run test:a11y` (axe-core): 0 infracciones graves como visitante, paciente, profesional y propietario.
+- `npm run test:layout` detecta además **texto aplastado** (columnas flexibles reducidas a pocos píxeles).
+
+### Back end
+- Cada respuesta lleva `X-Request-Id` (el de Cloudflare si existe) y `Server-Timing`; los errores incluyen `request_id` y los 500 se registran en JSON sin datos personales.
+- `429` con cabecera `Retry-After` y minutos de espera en el mensaje.
+- 46 pruebas (identificador de solicitud, errores y límite de intentos).
+
 ## 1.0.0 — 28-oct-2026 · Plataforma de citas médicas sobre Cloudflare Workers
 
 Reconstrucción completa de la demo estática a partir del Documento Maestro, la Estructura de Aplicación y el Brand Deck. Detalle de hallazgos en `docs/ANALISIS_2026.md`.

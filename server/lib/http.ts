@@ -4,6 +4,8 @@ export class HttpError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /** Segundos hasta poder reintentar (cabecera Retry-After en 429/503). */
+    public retryAfter?: number,
   ) {
     super(message);
   }

@@ -6,12 +6,13 @@
 import { Hono } from "hono";
 import type { AppBindings, User } from "../env";
 import { type AppointmentStatus, PAYMENT_LABEL, type PaymentStatus, STATUS_LABEL } from "../lib/appointments";
-import { CITIES, KINDS, PLAN_MAP, SPECIALTY_MAP, TITLES, cityByName, slugify } from "../lib/catalog";
+import { CITIES, KINDS, PLAN_MAP, TITLES, cityByName, slugify } from "../lib/catalog";
+import { type Taxonomy, getTaxonomy } from "../lib/taxonomy";
 import { track } from "../lib/events";
 import { readJson, requireUser } from "../lib/guards";
 import { clean, fail, isCents } from "../lib/http";
 import { storeUserImage } from "../lib/media";
-import { PAYMENT_STATUS_LABEL, type PaymentRow, createPayment, startCheckout } from "../lib/payments";
+import { PAYMENT_STATUS_LABEL, type PaymentRow, collectedOnline, createPayment, startCheckout } from "../lib/payments";
 import { type PractitionerRow, fullName, patientShortName, publicPractitioner, reputationFor } from "../lib/practitioners";
 import { feeBps } from "../lib/pricing";
 import { RULES, hit } from "../lib/rate-limit";
@@ -30,9 +31,9 @@ async function requirePractitioner(db: D1Database, user: User) {
 }
 
 /** Vista privada: incluye dirección, registro profesional, ajustes de agenda y estado de revisión. */
-function privateView(p: PractitionerRow) {
+function privateView(p: PractitionerRow, tax: Taxonomy) {
   return {
-    ...publicPractitioner(p),
+    ...publicPractitioner(p, undefined, {}, tax),
     address: p.address,
     license_number: p.license_number,
     status: p.status,
@@ -60,7 +61,7 @@ pro.get("/me", async (c) => {
       .bind(p.id, Date.now())
       .all(),
   ]);
-  return c.json({ practitioner: privateView(p), rules: rules.results, blocks: blocks.results });
+  return c.json({ practitioner: privateView(p, await getTaxonomy(c.env.DB)), rules: rules.results, blocks: blocks.results });
 });
 
 type ProfileInput = Partial<{
@@ -96,13 +97,19 @@ type ProfileInput = Partial<{
 }>;
 
 /** Valida y normaliza los campos editables. Cambios en nombre, especialidad o registro reabren la verificación. */
-function normalizeProfile(b: ProfileInput, base: Partial<PractitionerRow>) {
+function normalizeProfile(b: ProfileInput, base: Partial<PractitionerRow>, tax: Taxonomy) {
   const pick = <K extends keyof PractitionerRow>(k: K, v: PractitionerRow[K] | undefined) => (v === undefined ? base[k] : v);
   const kind = b.kind === undefined ? base.kind : b.kind in KINDS ? (b.kind as PractitionerRow["kind"]) : fail(400, "Tipo de perfil inválido");
   const title = b.title === undefined ? base.title : (TITLES as readonly string[]).includes(b.title) ? b.title : fail(400, "Título inválido");
   const display = b.display_name === undefined ? base.display_name : clean(b.display_name, 80);
   if (!display || display.length < 3) fail(400, "Escribe el nombre público (mínimo 3 caracteres)");
-  const specialty = b.specialty === undefined ? base.specialty : SPECIALTY_MAP.has(b.specialty) ? b.specialty : fail(400, "Elige una especialidad de la lista");
+  // Especialidades visibles (base o agregadas en el CMS); se conserva la actual aunque luego se haya ocultado.
+  const specialty =
+    b.specialty === undefined || b.specialty === base.specialty
+      ? base.specialty
+      : tax.map.get(b.specialty)?.visible
+        ? b.specialty
+        : fail(400, "Elige una especialidad de la lista");
   const city = b.city === undefined ? base.city : cityByName(b.city) ? b.city : fail(400, "Ciudad fuera del piloto");
   const cents = (v: unknown, label: string) => {
     if (v === undefined) return undefined;
@@ -202,6 +209,7 @@ pro.post("/me", async (c) => {
       sector: "",
       address: "",
     },
+    await getTaxonomy(db),
   );
   let slug = slugify(`${v.title ?? ""} ${v.display_name}`);
   if (await db.prepare("SELECT 1 FROM practitioners WHERE slug=?").bind(slug).first()) slug = `${slug}-${crypto.randomUUID().slice(0, 6)}`;
@@ -223,7 +231,7 @@ pro.post("/me", async (c) => {
       db.prepare("INSERT INTO availability_rules(practitioner_id,weekday,start_min,end_min,modality) VALUES(?,?,?,?,'ambas')").bind(p!.id, d, s, e),
     ),
   );
-  return c.json({ practitioner: privateView(p!), message: "Perfil creado. Completa tus datos y envíalo a verificación." }, 201);
+  return c.json({ practitioner: privateView(p!, await getTaxonomy(c.env.DB)), message: "Perfil creado. Completa tus datos y envíalo a verificación." }, 201);
 });
 
 pro.patch("/me", async (c) => {
@@ -232,7 +240,7 @@ pro.patch("/me", async (c) => {
   await hit(db, `write:${user.id}`, RULES.write);
   const p = await requirePractitioner(db, user);
   const b = await readJson<ProfileInput>(c);
-  const v = normalizeProfile(b, p);
+  const v = normalizeProfile(b, p, await getTaxonomy(c.env.DB));
   // Cambios relevantes reabren la verificación (Documento Maestro §7.1): el sello se retira hasta revisar.
   const sensitive = v.display_name !== p.display_name || v.specialty !== p.specialty || v.license_number !== p.license_number || v.title !== p.title;
   const statements = [
@@ -258,7 +266,7 @@ pro.patch("/me", async (c) => {
   }
   await db.batch(statements);
   return c.json({
-    practitioner: privateView((await mine(db, user))!),
+    practitioner: privateView((await mine(db, user))!, await getTaxonomy(db)),
     message:
       sensitive && p.verification === "verificado" ? "Guardado. Como cambiaste datos de identidad, buscaDR volverá a verificarlos." : "Cambios guardados",
   });
@@ -457,7 +465,7 @@ pro.get("/dashboard", async (c) => {
     { key: "verificacion", label: "Perfil verificado y publicado", done: p.status === "active" && p.verification === "verificado" },
   ];
   return c.json({
-    practitioner: privateView(p),
+    practitioner: privateView(p, await getTaxonomy(c.env.DB)),
     kpis: {
       today: counts?.today ?? 0,
       week: counts?.week ?? 0,
@@ -496,7 +504,7 @@ pro.get("/income", async (c) => {
   const rows = (
     await db
       .prepare(
-        `SELECT pay.id,pay.kind,pay.appointment_id,pay.amount_cents,pay.fee_cents,pay.net_cents,pay.provider,pay.status,pay.method,pay.card_brand,pay.card_last4,pay.created_at,pay.approved_at,pay.refunded_at,
+        `SELECT pay.id,pay.kind,pay.appointment_id,pay.amount_cents,pay.fee_cents,pay.net_cents,pay.provider,pay.gateway,pay.status,pay.method,pay.card_brand,pay.card_last4,pay.created_at,pay.approved_at,pay.refunded_at,
                 a.start_ms,a.modality,a.patient_name
          FROM payments pay LEFT JOIN appointments a ON a.id=pay.appointment_id
          WHERE pay.practitioner_id=? AND pay.kind='cita' AND pay.created_at>=datetime(?/1000,'unixepoch') AND pay.created_at<datetime(?/1000,'unixepoch')
@@ -516,8 +524,8 @@ pro.get("/income", async (c) => {
     gross_cents: approved.reduce((s, r) => s + r.amount_cents, 0),
     fee_cents: approved.reduce((s, r) => s + r.fee_cents, 0),
     net_cents: approved.reduce((s, r) => s + r.net_cents, 0),
-    online_cents: approved.filter((r) => r.provider !== "consultorio").reduce((s, r) => s + r.net_cents, 0),
-    office_cents: approved.filter((r) => r.provider === "consultorio").reduce((s, r) => s + r.net_cents, 0),
+    online_cents: approved.filter((r) => collectedOnline(r as PaymentRow)).reduce((s, r) => s + r.net_cents, 0),
+    office_cents: approved.filter((r) => !collectedOnline(r as PaymentRow)).reduce((s, r) => s + r.net_cents, 0),
     refunded_cents: rows.filter((r) => r.status === "reembolsado").reduce((s, r) => s + r.amount_cents, 0),
     count: approved.length,
   };
@@ -532,7 +540,7 @@ pro.get("/income", async (c) => {
           r.appointment_id,
           r.patient_name,
           r.modality,
-          r.provider,
+          r.gateway || r.provider,
           r.status_label,
           (r.amount_cents / 100).toFixed(2),
           (r.fee_cents / 100).toFixed(2),

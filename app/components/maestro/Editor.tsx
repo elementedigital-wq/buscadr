@@ -9,6 +9,7 @@ import { Icon, IconLibraryContext } from "../Icon";
 import { Spinner } from "../ui";
 import { Preview } from "./Preview";
 import { Acceso } from "./access";
+import { Pagos } from "./payments";
 import { EditorContext } from "./fields";
 import { MediaContext, useMediaStore } from "./media";
 import { TABS, type TabId, contentWarnings, fieldId, setPath, tabForPath } from "./model";
@@ -180,6 +181,8 @@ export default function Editor({
         return <Permisos notify={notify} />;
       case "acceso":
         return <Acceso email={owner?.email ?? ""} recoveryEmail={recoveryEmail} notify={notify} />;
+      case "pagos":
+        return <Pagos notify={notify} />;
       case "resenas":
         return <Resenas notify={notify} />;
       case "historial":
@@ -197,7 +200,7 @@ export default function Editor({
     }
   })();
 
-  const contentTab = !["permisos", "resenas", "historial"].includes(tab);
+  const contentTab = !["permisos", "pagos", "resenas", "historial"].includes(tab);
 
   return (
     <EditorContext.Provider value={{ config, update, focusPath }}>

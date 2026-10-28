@@ -7,7 +7,9 @@
  */
 import { Hono } from "hono";
 import type { AppBindings, Env } from "../env";
-import { CITIES, SPECIALTY_MAP, guessSpecialty, normalizeText } from "../lib/catalog";
+import { CITIES, normalizeText } from "../lib/catalog";
+import { ONLINE_SQL } from "../lib/payments";
+import { getTaxonomy } from "../lib/taxonomy";
 import { track } from "../lib/events";
 import { notifyPatient } from "../lib/settle";
 import { formatLong } from "../lib/time";
@@ -69,7 +71,7 @@ async function handleDecision(env: Env, origin: string, msg: Inbound) {
     .run();
   if (!accept && pro.payment_status === "pagado") {
     const { refundPayment } = await import("../lib/settle");
-    const paid = await db.prepare("SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND provider<>'consultorio' LIMIT 1").bind(id).first();
+    const paid = await db.prepare(`SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND ${ONLINE_SQL()} LIMIT 1`).bind(id).first();
     if (paid) await refundPayment(env, paid as any, "Rechazada por el profesional desde WhatsApp");
   }
   await track(db, "whatsapp_action", { userId: pro.id, appointmentId: id, props: { action: accept ? "confirm" : "decline" } });
@@ -100,7 +102,8 @@ async function handleSearch(env: Env, origin: string, msg: Inbound) {
     );
     return;
   }
-  const specialty = guessSpecialty(text);
+  const tax = await getTaxonomy(env.DB);
+  const specialty = tax.guess(text);
   const city = CITIES.find((x) => n.includes(x.slug) || n.includes(normalizeText(x.name)));
   const virtual = /virtual|online|en linea|videollamada/.test(n);
   const rows = (
@@ -137,7 +140,7 @@ async function handleSearch(env: Env, origin: string, msg: Inbound) {
   const money = (c: number) => `$${(c / 100).toFixed(2)}`;
   const lines = rows.map(
     (r) =>
-      `• ${r.title} ${r.display_name} · ${SPECIALTY_MAP.get(r.specialty)?.name ?? r.specialty}${r.demo ? " (muestra)" : ""}\n  ${r.sector || r.city}${r.price_in_person_cents ? ` · presencial ${money(r.price_in_person_cents)}` : ""}${r.price_virtual_cents ? ` · virtual ${money(r.price_virtual_cents)}` : ""}\n  ${origin}/doctor/${r.slug}`,
+      `• ${r.title} ${r.display_name} · ${tax.nameOf(r.specialty)}${r.demo ? " (muestra)" : ""}\n  ${r.sector || r.city}${r.price_in_person_cents ? ` · presencial ${money(r.price_in_person_cents)}` : ""}${r.price_virtual_cents ? ` · virtual ${money(r.price_virtual_cents)}` : ""}\n  ${origin}/doctor/${r.slug}`,
   );
   await reply(env, msg.from, `Encontré esto para ti:\n${lines.join("\n")}\n\nVer horarios y reservar: ${origin}/buscar?${params}`);
 }

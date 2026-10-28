@@ -15,8 +15,8 @@ Un solo Worker, **`buscadr`**, sirve la web (React Router con SSR) y la API (`/a
 | `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` | Secret | No | Webhook: botones Confirmar/Rechazar y búsqueda por chat |
 | `WHATSAPP_TEMPLATE_REQUEST`, `WHATSAPP_TEMPLATE_UPDATE` | Variable | No | Plantillas aprobadas por Meta (fuera de la ventana de 24 h) |
 | `BUSCADR_SUPPORT_WHATSAPP` | Variable | No | Número de soporte de buscaDR |
-| `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID` | Secret | No (producción de pagos) | Pasarela real. Sin ellos, buscaDR Pay funciona en **sandbox** (sin dinero real) |
-| `BUSCADR_PAYMENTS` | Variable (`wrangler.jsonc`) | — | `sandbox` (por defecto) o `payphone` |
+| `BUSCADR_SECRETS_KEY` | **Secret** | Recomendado | Clave (32+ caracteres aleatorios) para guardar cifradas las credenciales de pasarelas que cargues en CMS → Pasarelas de pago. Si se pierde, vuelve a cargar las credenciales |
+| `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID` | Secret | No | Alternativa a cargarlas en el CMS. Los medios de pago se activan en CMS → Pasarelas de pago (por defecto: tarjeta de prueba y pago en consultorio) |
 | `BUSCADR_FEE_BPS` | Variable (`wrangler.jsonc`) | — | Comisión por cita pagada en línea: `800` = 8 % |
 | `BUSCADR_ENFORCE_PLANS` | Variable | No | `1` limita funciones según el plan; sin ella (piloto) todo está disponible |
 | `GOOGLE_CLIENT_ID` | Variable | No | Botón «Continuar con Google» |

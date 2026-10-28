@@ -4,6 +4,7 @@ import { isAdmin } from "../lib/guards";
 import { clean, fail } from "../lib/http";
 import { deleteImage, mediaStorage, putImage, readFontUpload, readImageUpload } from "../lib/media";
 import { type IconStyle, searchIcons } from "./icons";
+import { cmsPayments } from "./payments";
 import { DEFAULT_CMS, FONT_FAMILY, normalizeCms, readConfig } from "./model";
 
 /** Solo la cuenta de administración configurada en los secretos de Cloudflare administra el CMS. */
@@ -36,6 +37,8 @@ cms.use("*", async (c, next) => {
   await ensureSite(c.env.DB);
   await next();
 });
+
+cms.route("/payments", cmsPayments);
 
 cms.get("/session", (c) => {
   const user = c.get("user")!;

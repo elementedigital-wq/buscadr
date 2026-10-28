@@ -1,6 +1,7 @@
 /** Perfiles profesionales: tipos, vista pública (sin datos privados) y agregados de reputación. */
 import { approximate } from "./geo";
-import { KINDS, type Kind, SPECIALTY_MAP } from "./catalog";
+import { KINDS, type Kind } from "./catalog";
+import { BASE_TAXONOMY, type Taxonomy } from "./taxonomy";
 
 export type PractitionerRow = {
   id: number;
@@ -60,8 +61,13 @@ export const parseServices = (raw: string): string[] => {
 };
 
 /** Vista pública: coordenadas aproximadas (~1 km), sin dirección exacta, teléfono ni licencia completa. */
-export function publicPractitioner(p: PractitionerRow, rep?: Reputation, extra: { distance_km?: number | null; next_slot_ms?: number | null } = {}) {
-  const sp = SPECIALTY_MAP.get(p.specialty);
+export function publicPractitioner(
+  p: PractitionerRow,
+  rep?: Reputation,
+  extra: { distance_km?: number | null; next_slot_ms?: number | null } = {},
+  tax: Pick<Taxonomy, "map"> = BASE_TAXONOMY,
+) {
+  const sp = tax.map.get(p.specialty);
   return {
     id: p.id,
     slug: p.slug,

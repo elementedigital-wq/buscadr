@@ -9,6 +9,7 @@ Las migraciones de `migrations/` se aplican **solas** en el primer request tras 
 | `0003_citas_y_pagos.sql` | Citas, historial de cada cita, mensajes, opiniones, pagos, eventos de pago, suscripciones |
 | `0004_cms_media.sql` | CMS (sitio, versiones, auditoría, permisos, moderación) y medios |
 | `0005_perfiles_muestra.sql` | 12 perfiles de muestra con horarios (marcados `demo=1`, sin registro profesional ni opiniones) |
+| `0006_pasarelas.sql` | Pasarelas de pago configurables (`payment_gateways`) y `payments.gateway` |
 
 ## Escribir una migración
 

@@ -12,6 +12,8 @@
  *   Antes de activar en producción, contrastar los endpoints con la documentación vigente de Payphone.
  */
 import type { Env } from "../env";
+import { GATEWAY_MAP, type GatewayId, gatewaySecrets, paymentOptions } from "./gateways";
+import { HttpError } from "./http";
 import { HOUR } from "./time";
 
 export type Provider = "sandbox" | "payphone";
@@ -27,6 +29,8 @@ export type PaymentRow = {
   net_cents: number;
   currency: string;
   provider: Provider | "consultorio";
+  /** Medio concreto (ADR 0013); vacío en pagos anteriores = `provider`. */
+  gateway: string;
   provider_ref: string;
   status: "creado" | "pendiente" | "aprobado" | "rechazado" | "cancelado" | "reembolsado";
   method: string;
@@ -49,8 +53,17 @@ export const PAYMENT_STATUS_LABEL: Record<PaymentRow["status"], string> = {
   reembolsado: "Reembolsado",
 };
 
-export const payphoneConfigured = (env: Env) => !!(env.PAYPHONE_TOKEN && env.PAYPHONE_STORE_ID);
-export const activeProvider = (env: Env): Provider => (env.BUSCADR_PAYMENTS === "payphone" && payphoneConfigured(env) ? "payphone" : "sandbox");
+/** Medio del pago: `gateway` o, en pagos anteriores a las pasarelas configurables, `provider`. */
+export const gatewayOf = (p: Pick<PaymentRow, "gateway" | "provider">) => (p.gateway || p.provider) as GatewayId;
+/** Pago cobrado por buscaDR (no en el consultorio): aplica comisión y se reembolsa. */
+export const collectedOnline = (p: Pick<PaymentRow, "gateway" | "provider">) => gatewayOf(p) !== "consultorio";
+/** SQL equivalente a `collectedOnline` (alias `pay` o sin alias). */
+export const ONLINE_SQL = (alias = "") => `COALESCE(NULLIF(${alias}gateway,''),${alias}provider)<>'consultorio'`;
+
+async function payphoneCreds(env: Env) {
+  const s = await gatewaySecrets(env, "payphone");
+  return s.token && s.store_id ? { token: s.token, storeId: s.store_id } : null;
+}
 
 const PAYPHONE = "https://pay.payphonetodoesposible.com/api";
 
@@ -72,19 +85,25 @@ export async function createPayment(
     amount_cents: number;
     fee_cents: number;
     net_cents: number;
+    /** Medio elegido; si falta, el primero activo para pagar en línea (orden del CMS). */
+    gateway?: GatewayId;
   },
 ) {
   const id = crypto.randomUUID();
-  const provider = activeProvider(env);
+  const { online } = await paymentOptions(env);
+  const chosen = (p.gateway && online.find((g) => g.id === p.gateway)) || online[0];
+  if (!chosen) throw new HttpError(409, "Por ahora no hay medios de pago en línea activos. Elige pagar en el consultorio.", "NO_ONLINE_GATEWAY");
+  const gateway = chosen.id;
+  const provider = GATEWAY_MAP.get(gateway)!.provider;
   await db.batch([
     db
       .prepare(
-        "INSERT INTO payments(id,kind,appointment_id,plan,payer_id,practitioner_id,amount_cents,fee_cents,net_cents,provider,status) VALUES(?,?,?,?,?,?,?,?,?,?,'creado')",
+        "INSERT INTO payments(id,kind,appointment_id,plan,payer_id,practitioner_id,amount_cents,fee_cents,net_cents,provider,gateway,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,'creado')",
       )
-      .bind(id, p.kind, p.appointment_id ?? null, p.plan ?? null, p.payer_id, p.practitioner_id, p.amount_cents, p.fee_cents, p.net_cents, provider),
-    paymentEvent(db, id, "creado", { provider, amount_cents: p.amount_cents }),
+      .bind(id, p.kind, p.appointment_id ?? null, p.plan ?? null, p.payer_id, p.practitioner_id, p.amount_cents, p.fee_cents, p.net_cents, provider, gateway),
+    paymentEvent(db, id, "creado", { gateway, amount_cents: p.amount_cents }),
   ]);
-  return { id, provider };
+  return { id, provider, gateway };
 }
 
 /**
@@ -92,10 +111,12 @@ export async function createPayment(
  * la URL segura de pago con tarjeta (el número de tarjeta nunca pasa por buscaDR).
  */
 export async function startCheckout(env: Env, payment: PaymentRow, origin: string, description: string, fetchFn: typeof fetch = fetch) {
-  if (payment.provider !== "payphone") return { url: `/pagar/${payment.id}` };
+  if (gatewayOf(payment) !== "payphone") return { url: `/pagar/${payment.id}` };
+  const creds = await payphoneCreds(env);
+  if (!creds) return null;
   const res = await fetchFn(`${PAYPHONE}/button/Prepare`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.PAYPHONE_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${creds.token}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       amount: payment.amount_cents,
       amountWithoutTax: payment.amount_cents,
@@ -105,7 +126,7 @@ export async function startCheckout(env: Env, payment: PaymentRow, origin: strin
       tip: 0,
       currency: "USD",
       clientTransactionId: payment.id.replace(/-/g, "").slice(0, 32),
-      storeId: env.PAYPHONE_STORE_ID,
+      storeId: creds.storeId,
       reference: description.slice(0, 100),
       responseUrl: `${origin}/pagos/retorno`,
       cancellationUrl: `${origin}/pagos/retorno?cancelado=1&ref=${payment.id}`,
@@ -139,6 +160,18 @@ export async function startCheckout(env: Env, payment: PaymentRow, origin: strin
   return { url: data.payWithCard };
 }
 
+/**
+ * Transferencia bancaria: el horario se retiene como una solicitud normal (24 h o hasta 1 h antes),
+ * no 30 minutos, porque la confirmación del pago es manual.
+ */
+export async function holdForTransfer(db: D1Database, appointmentId: number, startMs: number, now = Date.now()) {
+  const until = Math.max(now + 30 * 60_000, Math.min(now + 24 * HOUR, startMs - HOUR));
+  await db
+    .prepare("UPDATE appointments SET hold_expires_ms=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='solicitada' AND payment_status='pendiente'")
+    .bind(Math.min(until, startMs), appointmentId)
+    .run();
+}
+
 /** Identificador corto que se envía a Payphone (clientTransactionId) a partir del id del libro. */
 export const clientTxIdOf = (paymentId: string) => paymentId.replace(/-/g, "").slice(0, 32);
 
@@ -147,9 +180,11 @@ export type ConfirmResult = { approved: boolean; status: PaymentRow["status"]; b
 /** Confirma con Payphone una transacción que volvió al sitio. Compara importe e identificador. */
 export async function confirmPayphone(env: Env, payment: PaymentRow, transactionId: string, fetchFn: typeof fetch = fetch): Promise<ConfirmResult> {
   if (!/^\d{1,20}$/.test(transactionId)) return { approved: false, status: "rechazado", error: "Identificador de transacción inválido" };
+  const creds = await payphoneCreds(env);
+  if (!creds) return { approved: false, status: "pendiente", error: "Payphone no está configurado." };
   const res = await fetchFn(`${PAYPHONE}/button/V2/Confirm`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.PAYPHONE_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${creds.token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ id: Number(transactionId), clientTxId: clientTxIdOf(payment.id) }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
@@ -182,12 +217,17 @@ export async function confirmPayphone(env: Env, payment: PaymentRow, transaction
   };
 }
 
-/** Reverso/reembolso. Sandbox: inmediato. Payphone: reverso por clientTransactionId. */
+/**
+ * Reverso/reembolso. Sandbox: inmediato. Payphone: reverso por clientTransactionId. Transferencia:
+ * se registra aquí y la administración devuelve el dinero por transferencia (queda en la bitácora).
+ */
 export async function refundWithProvider(env: Env, payment: PaymentRow, fetchFn: typeof fetch = fetch) {
-  if (payment.provider !== "payphone") return true;
+  if (gatewayOf(payment) !== "payphone") return true;
+  const creds = await payphoneCreds(env);
+  if (!creds) return false;
   const res = await fetchFn(`${PAYPHONE}/Reverse/Client`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.PAYPHONE_TOKEN}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${creds.token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ clientId: clientTxIdOf(payment.id) }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);

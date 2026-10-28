@@ -5,14 +5,15 @@
  */
 import { Hono } from "hono";
 import type { AppBindings, Env } from "../env";
-import { CITIES, PLANS, SPECIALTIES, SPECIALTY_MAP, cityByName, guessSpecialty, normalizeText } from "../lib/catalog";
+import { CITIES, PLANS, cityByName, normalizeText } from "../lib/catalog";
 import { track } from "../lib/events";
 import { haversineKm } from "../lib/geo";
 import { requireUser } from "../lib/guards";
 import { clean, fail } from "../lib/http";
 import { getPublishedConfig } from "../cms/routes";
-import { activeProvider } from "../lib/payments";
+import { paymentOptions } from "../lib/gateways";
 import { type PractitionerRow, publicPractitioner, reputationFor } from "../lib/practitioners";
+import { getTaxonomy } from "../lib/taxonomy";
 import { feeBps } from "../lib/pricing";
 import { BOOKING_WINDOW_DAYS, type Interval, type Modality, type Rule, daySlots, rangeSlots } from "../lib/slots";
 import { DAY, addDays, isDate, localDate } from "../lib/time";
@@ -71,13 +72,18 @@ async function withCms<T extends { id: number; photo: string; headline: string }
   });
 }
 
-export function catalogPayload(env: Env) {
+export async function catalogPayload(env: Env) {
+  const [tax, pay] = await Promise.all([getTaxonomy(env.DB), paymentOptions(env)]);
   return {
-    specialties: SPECIALTIES.map(({ keywords: _k, ...s }) => s),
+    categories: tax.categories.filter((c) => c.visible),
+    specialties: tax.specialties.filter((s) => s.visible).map(({ keywords: _k, ...s }) => s),
     cities: CITIES,
     plans: PLANS,
     fee_bps: feeBps(env),
-    payments: activeProvider(env),
+    /** «sandbox» mientras ningún medio en línea mueva dinero real (avisos de «modo de prueba»). */
+    payments: pay.online.some((g) => g.live) ? ("payphone" as const) : ("sandbox" as const),
+    /** Medios activos (orden del CMS): en línea al reservar y, si está activo, en el consultorio. */
+    gateways: pay.all.filter((g) => g.active).map((g) => ({ id: g.id, kind: g.kind, title: g.title, description: g.description })),
   };
 }
 
@@ -87,7 +93,9 @@ practitioners.get("/", async (c) => {
   const db = c.env.DB;
   const q = clean(c.req.query("q"), 80);
   const specialtyParam = clean(c.req.query("specialty"), 40);
-  const specialty = SPECIALTY_MAP.has(specialtyParam) ? specialtyParam : q ? guessSpecialty(q) : null;
+  const tax = await getTaxonomy(db);
+  const known = tax.map.has(specialtyParam);
+  const specialty = known ? specialtyParam : q ? tax.guess(q) : null;
   const city = cityByName(clean(c.req.query("city"), 40));
   const modality = c.req.query("modality") === "virtual" ? "virtual" : c.req.query("modality") === "presencial" ? "presencial" : null;
   const sort = (SORTS as readonly string[]).includes(String(c.req.query("sort"))) ? String(c.req.query("sort")) : "relevancia";
@@ -98,7 +106,7 @@ practitioners.get("/", async (c) => {
 
   const where = ["p.status='active'"];
   const binds: unknown[] = [];
-  if (SPECIALTY_MAP.has(specialtyParam)) {
+  if (known) {
     where.push("p.specialty=?");
     binds.push(specialtyParam);
   }
@@ -118,10 +126,8 @@ practitioners.get("/", async (c) => {
   ).results.filter(
     (p) =>
       !nq ||
-      (!SPECIALTY_MAP.has(specialtyParam) && specialty && p.specialty === specialty) ||
-      normalizeText(
-        [p.title, p.display_name, p.sector, p.city, p.headline, p.services, p.subspecialty, SPECIALTY_MAP.get(p.specialty)?.name ?? ""].join(" "),
-      ).includes(nq),
+      (!known && specialty && p.specialty === specialty) ||
+      normalizeText([p.title, p.display_name, p.sector, p.city, p.headline, p.services, p.subspecialty, tax.nameOf(p.specialty)].join(" ")).includes(nq),
   );
   const now = Date.now();
   const reps = await reputationFor(
@@ -136,10 +142,15 @@ practitioners.get("/", async (c) => {
     now,
   );
   const items0 = rows.map((p) =>
-    publicPractitioner(p, reps.get(p.id), {
-      distance_km: origin && p.lat != null && p.lng != null ? Math.round((haversineKm(origin.lat, origin.lng, p.lat, p.lng) ?? 0) * 10) / 10 : null,
-      next_slot_ms: nextSlot(p, agenda, modality, now),
-    }),
+    publicPractitioner(
+      p,
+      reps.get(p.id),
+      {
+        distance_km: origin && p.lat != null && p.lng != null ? Math.round((haversineKm(origin.lat, origin.lng, p.lat, p.lng) ?? 0) * 10) / 10 : null,
+        next_slot_ms: nextSlot(p, agenda, modality, now),
+      },
+      tax,
+    ),
   );
   let items = await withCms(db, items0);
   const price = (x: (typeof items)[number]) => (modality === "virtual" ? x.price_virtual_cents : x.price_in_person_cents || x.price_virtual_cents);
@@ -210,7 +221,7 @@ practitioners.get("/:slug", async (c) => {
     );
   }
   return c.json({
-    practitioner: (await withCms(db, [publicPractitioner(p, reps.get(p.id), { next_slot_ms: nextSlot(p, agenda, null, now) })]))[0],
+    practitioner: (await withCms(db, [publicPractitioner(p, reps.get(p.id), { next_slot_ms: nextSlot(p, agenda, null, now) }, await getTaxonomy(db))]))[0],
     preview: p.status !== "active",
     hours: rules.results,
     favorite: !!fav,
@@ -254,6 +265,7 @@ practitioners.get("/:slug/availability", async (c) => {
 
 favorites.get("/", async (c) => {
   const user = requireUser(c);
+  const tax = await getTaxonomy(c.env.DB);
   const rows = (
     await c.env.DB.prepare(
       "SELECT p.* FROM favorites f JOIN practitioners p ON p.id=f.practitioner_id WHERE f.user_id=? AND p.status='active' ORDER BY f.created_at DESC",
@@ -268,7 +280,7 @@ favorites.get("/", async (c) => {
   return c.json({
     items: await withCms(
       c.env.DB,
-      rows.map((p) => publicPractitioner(p, reps.get(p.id))),
+      rows.map((p) => publicPractitioner(p, reps.get(p.id), {}, tax)),
     ),
   });
 });

@@ -1,8 +1,9 @@
 /**
- * Taxonomía sanitaria inicial y ciudades del piloto (Documento Maestro §3.1 y §14).
- * Especialidades de atención ambulatoria y demanda frecuente; la lista final se valida con
- * entrevistas y criterios de acreditación aplicables a cada profesión. Sin datos clínicos.
+ * Catálogo base: tonos, especialidades (taxonomía completa en `taxonomy-data.ts`), tipos de perfil,
+ * ciudades del piloto y planes. La taxonomía efectiva (con lo que agrega el CMS) está en `taxonomy.ts`.
  */
+import { BASE_SPECIALTIES } from "./taxonomy-data";
+
 export const TONES = ["azul", "verde", "cielo", "neutro"] as const;
 export type Tone = (typeof TONES)[number];
 
@@ -11,160 +12,19 @@ export type Specialty = {
   name: string;
   /** Profesional en singular para SEO y tarjetas: «Pediatra», «Psicólogo/a». */
   professional: string;
-  /** Icono del catálogo Font Awesome Free (`app/lib/icon-data.ts`), editable en el CMS. */
+  /** Categoría (`CATEGORIES`): agrupa especialidades en el sitio y en el CMS. */
+  category: string;
+  /** Ícono de Font Awesome Free (`app/lib/icon-data.ts`), editable en el CMS. */
   icon: string;
   tone: Tone;
-  /** Visible en el directorio desde el inicio (las demás se activan en el CMS). */
+  /** Visible en el directorio desde el inicio (el CMS puede ocultarla). */
   enabled: boolean;
   keywords: string[];
 };
 
-export const SPECIALTIES: Specialty[] = [
-  {
-    slug: "medicina-general",
-    name: "Medicina general",
-    professional: "Médico general",
-    icon: "stethoscope",
-    tone: "azul",
-    enabled: true,
-    keywords: ["medico", "general", "familiar", "chequeo", "consulta", "fiebre", "gripe", "doctor"],
-  },
-  {
-    slug: "pediatria",
-    name: "Pediatría",
-    professional: "Pediatra",
-    icon: "baby",
-    tone: "verde",
-    enabled: true,
-    keywords: ["pediatra", "nino", "nina", "bebe", "infantil", "vacuna", "hijo"],
-  },
-  {
-    slug: "ginecologia",
-    name: "Ginecología",
-    professional: "Ginecólogo/a",
-    icon: "person-pregnant",
-    tone: "cielo",
-    enabled: true,
-    keywords: ["ginecologo", "ginecologa", "embarazo", "obstetricia", "mujer", "control prenatal"],
-  },
-  {
-    slug: "dermatologia",
-    name: "Dermatología",
-    professional: "Dermatólogo/a",
-    icon: "hand-dots",
-    tone: "verde",
-    enabled: true,
-    keywords: ["dermatologo", "piel", "acne", "lunares", "manchas", "cabello"],
-  },
-  {
-    slug: "odontologia",
-    name: "Odontología",
-    professional: "Odontólogo/a",
-    icon: "tooth",
-    tone: "azul",
-    enabled: true,
-    keywords: ["odontologo", "dentista", "dientes", "muela", "limpieza dental", "ortodoncia", "brackets"],
-  },
-  {
-    slug: "psicologia",
-    name: "Psicología",
-    professional: "Psicólogo/a",
-    icon: "brain",
-    tone: "cielo",
-    enabled: true,
-    keywords: ["psicologo", "psicologa", "terapia", "ansiedad", "estres", "pareja", "emocional"],
-  },
-  {
-    slug: "nutricion",
-    name: "Nutrición",
-    professional: "Nutricionista",
-    icon: "apple-whole",
-    tone: "verde",
-    enabled: true,
-    keywords: ["nutricionista", "dieta", "peso", "alimentacion", "obesidad", "nutriologo"],
-  },
-  {
-    slug: "fisioterapia",
-    name: "Fisioterapia",
-    professional: "Fisioterapeuta",
-    icon: "person-walking",
-    tone: "azul",
-    enabled: true,
-    keywords: ["fisioterapeuta", "rehabilitacion", "lesion", "espalda", "terapia fisica", "dolor"],
-  },
-  {
-    slug: "cardiologia",
-    name: "Cardiología",
-    professional: "Cardiólogo/a",
-    icon: "heart-pulse",
-    tone: "azul",
-    enabled: true,
-    keywords: ["cardiologo", "corazon", "presion", "hipertension", "electrocardiograma", "arritmia"],
-  },
-  {
-    slug: "traumatologia",
-    name: "Traumatología",
-    professional: "Traumatólogo/a",
-    icon: "bone",
-    tone: "neutro",
-    enabled: true,
-    keywords: ["traumatologo", "huesos", "rodilla", "fractura", "ortopedia", "columna"],
-  },
-  {
-    slug: "oftalmologia",
-    name: "Oftalmología",
-    professional: "Oftalmólogo/a",
-    icon: "eye",
-    tone: "cielo",
-    enabled: true,
-    keywords: ["oftalmologo", "ojos", "vista", "lentes", "vision"],
-  },
-  {
-    slug: "otorrinolaringologia",
-    name: "Otorrinolaringología",
-    professional: "Otorrino",
-    icon: "ear-listen",
-    tone: "neutro",
-    enabled: false,
-    keywords: ["otorrino", "oido", "nariz", "garganta", "sinusitis"],
-  },
-  {
-    slug: "endocrinologia",
-    name: "Endocrinología",
-    professional: "Endocrinólogo/a",
-    icon: "vial",
-    tone: "verde",
-    enabled: false,
-    keywords: ["endocrinologo", "tiroides", "diabetes", "hormonas"],
-  },
-  {
-    slug: "neurologia",
-    name: "Neurología",
-    professional: "Neurólogo/a",
-    icon: "head-side-virus",
-    tone: "azul",
-    enabled: false,
-    keywords: ["neurologo", "migrana", "cabeza", "nervios", "convulsiones"],
-  },
-  {
-    slug: "psiquiatria",
-    name: "Psiquiatría",
-    professional: "Psiquiatra",
-    icon: "comment-medical",
-    tone: "cielo",
-    enabled: false,
-    keywords: ["psiquiatra", "depresion", "medicacion", "salud mental"],
-  },
-  {
-    slug: "laboratorio",
-    name: "Laboratorio clínico",
-    professional: "Laboratorio",
-    icon: "microscope",
-    tone: "neutro",
-    enabled: false,
-    keywords: ["laboratorio", "examenes", "sangre", "analisis"],
-  },
-];
+export { CATEGORIES, type Category } from "./taxonomy-data";
+/** Especialidades base (taxonomía completa en `taxonomy-data.ts`; el CMS suma las propias). */
+export const SPECIALTIES: Specialty[] = BASE_SPECIALTIES;
 
 export const SPECIALTY_MAP = new Map(SPECIALTIES.map((s) => [s.slug, s]));
 export const SPECIALTY_SLUGS = SPECIALTIES.map((s) => s.slug);
@@ -203,12 +63,15 @@ export const cityBySlug = (slug: string | null | undefined) => CITIES.find((c) =
 export const normalizeText = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 
 /** Sugiere especialidad a partir de un texto libre («me duele la muela» → odontología). */
-export function guessSpecialty(text: string): string | null {
+export function guessSpecialty(text: string, list: Pick<Specialty, "slug" | "name" | "professional" | "keywords">[] = SPECIALTIES): string | null {
   const n = normalizeText(text);
   if (!n) return null;
   let best: { slug: string; score: number } | null = null;
-  for (const s of SPECIALTIES) {
-    const score = [normalizeText(s.name), normalizeText(s.professional), ...s.keywords].reduce((acc, k) => acc + (n.includes(k) ? k.length : 0), 0);
+  // Cada término cuenta solo si aparece al inicio de una palabra y tiene 3+ letras («x» de «rayos x» no basta).
+  const words = ` ${n.replace(/[^a-z0-9ñ]+/g, " ")} `;
+  const hit = (k: string) => k.length >= 3 && words.includes(` ${k}`);
+  for (const s of list) {
+    const score = [normalizeText(s.name), normalizeText(s.professional), ...s.keywords].reduce((acc, k) => acc + (hit(k) ? k.length : 0), 0);
     if (score > 0 && (!best || score > best.score)) best = { slug: s.slug, score };
   }
   return best?.slug ?? null;

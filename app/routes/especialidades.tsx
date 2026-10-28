@@ -1,4 +1,4 @@
-import { SpecialtyGrid } from "../components/Specialties";
+import { SpecialtyDirectory } from "../components/Specialties";
 import { PageHeader } from "../components/ui";
 import { serverApiSafe } from "../lib/api.server";
 import type { PublicPractitioner } from "../lib/types";
@@ -17,7 +17,7 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "description",
     content:
-      "Pediatría, ginecología, dermatología, odontología, psicología, nutrición, cardiología y más. Encuentra especialistas en Ecuador y agenda tu cita.",
+      "Más de 80 especialidades: medicina general, pediatría, ginecología, cardiología, odontología, psicología, terapias, laboratorio y más. Encuentra especialistas en Ecuador y agenda tu cita.",
   },
 ];
 
@@ -28,7 +28,7 @@ export default function Especialidades({ loaderData }: Route.ComponentProps) {
       <PageHeader eyebrow="Directorio médico" title={root?.cms?.copy.specialtiesTitle ?? "Especialidades"}>
         {root?.cms?.copy.specialtiesSubtitle}
       </PageHeader>
-      <SpecialtyGrid cms={root?.cms} counts={loaderData.counts} />
+      <SpecialtyDirectory cms={root?.cms} counts={loaderData.counts} />
     </div>
   );
 }

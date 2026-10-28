@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { NavLink, Outlet, redirect, useNavigate } from "react-router";
+import { SpecialtyOptions } from "../../components/Specialties";
 import { Icon } from "../../components/Icon";
 import { Avatar, Notice, PROFILE_STATUS, StatusBadge } from "../../components/ui";
 import { type ApiError, api } from "../../lib/api";
@@ -106,11 +107,7 @@ function Onboarding() {
             <option value="" disabled>
               Elige tu especialidad
             </option>
-            {root?.catalog.specialties.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.name}
-              </option>
-            ))}
+            <SpecialtyOptions catalog={root?.catalog} />
           </select>
         </label>
         <label className="field">

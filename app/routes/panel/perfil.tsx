@@ -1,6 +1,7 @@
 /** Perfil profesional, tarifas presencial/virtual, cobro en línea y envío a verificación. */
 import { useRef, useState } from "react";
 import { Link, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
+import { SpecialtyOptions } from "../../components/Specialties";
 import { Icon } from "../../components/Icon";
 import { Avatar, Notice, Spinner } from "../../components/ui";
 import { type ApiError, api } from "../../lib/api";
@@ -168,11 +169,7 @@ export default function Perfil() {
         <label className="field">
           Especialidad
           <select name="specialty" className="input" defaultValue={p.specialty}>
-            {root?.catalog.specialties.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.name}
-              </option>
-            ))}
+            <SpecialtyOptions catalog={root?.catalog} current={p.specialty} />
           </select>
         </label>
         <label className="field">

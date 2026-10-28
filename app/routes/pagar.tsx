@@ -18,6 +18,10 @@ type Payment = {
   plan: string | null;
   amount_cents: number;
   provider: "sandbox" | "payphone" | "consultorio";
+  gateway: "sandbox" | "payphone" | "transferencia" | "consultorio";
+  gateway_title: string;
+  reference: string;
+  receipt: string;
   status: string;
   status_label: string;
   card_brand: string;
@@ -30,10 +34,41 @@ type Payment = {
 
 export const meta: Route.MetaFunction = () => [{ title: "Pagar · buscaDR Pay" }, { name: "robots", content: "noindex" }];
 
+type Method = { id: Payment["gateway"]; kind: "online" | "manual" | "offline"; title: string; description: string; bank?: Record<string, string> };
+
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const me = await serverApiSafe<{ user: unknown }>(context, request, "/api/auth/me", { user: null });
   if (!me.user) throw redirect(`/cuenta?next=/pagar/${params.id}`);
-  return serverApi<{ payment: Payment }>(context, request, `/api/payments/${encodeURIComponent(params.id)}`);
+  return serverApi<{ payment: Payment; methods: Method[] }>(context, request, `/api/payments/${encodeURIComponent(params.id)}`);
+}
+
+const METHOD_ICON: Record<string, string> = { sandbox: "card", payphone: "lock", transferencia: "building" };
+
+/** Datos para transferir con botón de copiar (el paciente los pega en su banca en línea). */
+function CopyRow({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+  if (!value) return null;
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2">
+      <div className="min-w-0">
+        <dt className="text-xs muted">{label}</dt>
+        <dd className="font-semibold break-words">{value}</dd>
+      </div>
+      <button
+        type="button"
+        className="btn-ghost btn-sm"
+        aria-label={`Copiar ${label}`}
+        onClick={() =>
+          navigator.clipboard
+            ?.writeText(value)
+            .then(() => setCopied(true))
+            .catch(() => {})
+        }
+      >
+        <Icon name={copied ? "check" : "copy"} className="size-4" /> {copied ? "Copiado" : "Copiar"}
+      </button>
+    </div>
+  );
 }
 
 const brandOf = (n: string) =>
@@ -46,6 +81,9 @@ const groups = (v: string) =>
 
 export default function Pagar({ loaderData }: Route.ComponentProps) {
   const p = loaderData.payment;
+  const methods = loaderData.methods;
+  const current = methods.find((m) => m.id === p.gateway);
+  const [receipt, setReceipt] = useState("");
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [number, setNumber] = useState("");
@@ -68,6 +106,33 @@ export default function Pagar({ loaderData }: Route.ComponentProps) {
         setError(r.error ?? "El pago no fue aprobado.");
         revalidator.revalidate();
       }
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function choose(id: Method["id"]) {
+    if (id === p.gateway) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/payments/${p.id}/method`, { body: { gateway: id } });
+      revalidator.revalidate();
+    } catch (err) {
+      setError((err as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function sendReceipt(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/payments/${p.id}/transfer`, { body: { receipt } });
+      setReceipt("");
+      revalidator.revalidate();
     } catch (err) {
       setError((err as ApiError).message);
     } finally {
@@ -139,10 +204,38 @@ export default function Pagar({ loaderData }: Route.ComponentProps) {
         <section className="card p-5" aria-labelledby="pago">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 id="pago" className="text-lg font-extrabold">
-              Tarjeta de crédito o débito
+              {done || !p.mine || methods.length <= 1 ? p.gateway_title || "Pago" : "Elige cómo pagar"}
             </h2>
             <StatusBadge status={p.status} label={p.status_label} />
           </div>
+          {!done && p.mine && methods.length > 1 && (
+            <fieldset className="mt-3" disabled={busy}>
+              <legend className="sr-only">Medio de pago</legend>
+              <div className="grid gap-2">
+                {methods.map((m) => (
+                  <label
+                    key={m.id}
+                    className={`grid cursor-pointer grid-cols-[auto_auto_minmax(0,1fr)] items-start gap-3 rounded-2xl p-3 ring-1 ${p.gateway === m.id ? "bg-white ring-2 ring-azul" : "bg-white ring-tinta/10 hover:ring-azul/40"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="metodo"
+                      className="mt-1 size-4 accent-[var(--color-azul)]"
+                      checked={p.gateway === m.id}
+                      onChange={() => choose(m.id)}
+                    />
+                    <span className="grid size-9 place-items-center rounded-xl tone-azul">
+                      <Icon name={METHOD_ICON[m.id] ?? "card"} className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-semibold">{m.title}</span>
+                      <span className="block text-xs muted">{m.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           {done ? (
             <div className="mt-4">
               <Notice tone="success" title={p.status === "aprobado" ? "Pago aprobado" : "Pago reembolsado"}>
@@ -154,7 +247,47 @@ export default function Pagar({ loaderData }: Route.ComponentProps) {
             </div>
           ) : !p.mine ? (
             <p className="mt-3 text-sm muted">Este pago lo realiza el paciente.</p>
-          ) : p.provider === "payphone" ? (
+          ) : p.gateway === "transferencia" ? (
+            <div className="mt-4 space-y-3">
+              <dl className="divide-y divide-tinta/5 rounded-2xl bg-fondo px-4 py-1">
+                <CopyRow label="Banco" value={current?.bank?.bank ?? ""} />
+                <CopyRow label="Tipo de cuenta" value={current?.bank?.account_type ?? ""} />
+                <CopyRow label="Número de cuenta" value={current?.bank?.account_number ?? ""} />
+                <CopyRow label="Titular" value={current?.bank?.holder ?? ""} />
+                <CopyRow label="RUC o cédula" value={current?.bank?.id_number ?? ""} />
+                <CopyRow label="Valor exacto" value={money(p.amount_cents)} />
+                <CopyRow label="Concepto o referencia" value={p.reference} />
+              </dl>
+              <p className="text-sm muted">
+                {current?.bank?.instructions || "Transfiere el valor exacto con la referencia en el concepto y registra el número de comprobante."}
+                {current?.bank?.email ? ` También puedes enviar el comprobante a ${current.bank.email}.` : ""}
+              </p>
+              {p.receipt ? (
+                <Notice tone="success" title="Comprobante registrado">
+                  Número {p.receipt}. Te avisaremos en cuanto confirmemos el pago; tu horario queda reservado mientras tanto.
+                </Notice>
+              ) : (
+                <form onSubmit={sendReceipt} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <label className="field">
+                    Número de comprobante
+                    <input
+                      className="input"
+                      required
+                      minLength={4}
+                      maxLength={40}
+                      value={receipt}
+                      onChange={(e) => setReceipt(e.target.value)}
+                      placeholder="Ej.: 0012345678"
+                    />
+                  </label>
+                  <button type="submit" className="btn-primary" disabled={busy}>
+                    {busy ? <Spinner /> : <Icon name="check" className="size-4" />} Ya transferí
+                  </button>
+                </form>
+              )}
+              {error && <Notice tone="danger">{error}</Notice>}
+            </div>
+          ) : p.gateway === "payphone" ? (
             <>
               <p className="mt-2 text-sm muted">Pagarás en la página segura de Payphone (Ecuador). Al terminar volverás a buscaDR con tu comprobante.</p>
               {error && (

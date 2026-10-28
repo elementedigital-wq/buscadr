@@ -45,10 +45,11 @@ El mismo CMS de Yank y Tull, adaptado al directorio médico buscaDR: vista previ
 | Banners | Campañas con imagen, texto, destino (página o especialidad), orden y visibilidad |
 | Textos y botones | Aviso de emergencias (obligatorio), cobertura del piloto, pie, títulos de secciones y textos de botones («Ver perfil», «Agendar cita»…) |
 | Componentes | Cantidades en portada y búsqueda, columnas, densidad de tarjetas, valoraciones, insignias, tarifas, mapa y bloques de la portada |
-| Especialidades e íconos | Nombre, **ícono Font Awesome** (catálogo o librería completa) o imagen, **tono** del recuadro, orden y visibilidad |
+| Especialidades y categorías | 83 especialidades base en 11 categorías: nombre, profesional, categoría, palabras de búsqueda, **ícono Font Awesome**, tono, orden y visibilidad. **Agregar categorías y especialidades propias** (se publican con «Publicar») |
 | Profesionales | Foto alternativa, frase de la tarjeta y «Destacado» (aparece primero, siempre con etiqueta) |
 | Biblioteca de medios | Subir, ver, copiar ruta y eliminar imágenes y fuentes (avisa si están en uso) |
 | SEO y redes | Título y descripción con vista previa de Google |
+| Pasarelas de pago | Como en WooCommerce: activar, ordenar y configurar tarjeta de prueba, Payphone, transferencia bancaria y pago en consultorio (título, descripción, datos de la cuenta y credenciales cifradas). Se aplica al instante, sin «Publicar» |
 | Permisos · Opiniones · Publicaciones | Suspender cuentas (cierra sus sesiones), ocultar opiniones abusivas (con constancia), historial y actividad |
 | Acceso y contraseña | Correo del propietario, estado de la recuperación por correo y cambio de contraseña |
 
@@ -59,7 +60,7 @@ Lo que el CMS **no** permite, a propósito: ocultar «Perfil de muestra» o el a
 - **Catálogo buscaDR** (≈290 íconos: salud y especialidades, citas y agenda, personas y confianza, dinero, interfaz, contorno y marcas como WhatsApp). Viaja con el sitio y se busca en español («pediatría», «corazón», «cita») o inglés.
 - **Librería completa** (pestaña del selector, más de 2.000 íconos): la búsqueda se hace en el servidor (`/api/cms/icons`). Al elegir un ícono que no está en el catálogo, su trazado se guarda en la marca (`theme.iconLibrary`) y el sitio lo dibuja sin cargar la librería entera.
 - **Imagen propia:** también se puede subir una imagen como ícono de la marca.
-- Se usan en especialidades, menú (escritorio, móvil y cuenta), beneficios, «Así funciona» y compromisos. El servidor solo acepta nombres válidos, trazados SVG saneados o rutas de imagen permitidas.
+- Se usan en especialidades, categorías, menú (escritorio, móvil y cuenta), beneficios, «Así funciona» y compromisos. El servidor solo acepta nombres válidos, trazados SVG saneados o rutas de imagen permitidas.
 - Ampliar el catálogo: añadir nombres a `scripts/icon-list.mjs` y ejecutar `npm run icons` (regenera `app/lib/icon-data.ts`).
 - Licencia: íconos CC BY 4.0, código MIT (`docs/CREDITOS.md`).
 
@@ -79,3 +80,18 @@ El navegador las reduce y comprime a WebP antes de subirlas (logo 800 px, ícono
 ## Estructura
 
 `app/routes/maestro.tsx`, `app/routes/maestro-restablecer.tsx`, `app/components/maestro/{fields,media,icons,fonts,access,Preview,panels,model}.tsx`, `app/lib/cms-preview.ts` (puente `postMessage` solo mismo origen), `app/lib/icons.ts`, `server/cms/{model,routes,icons}.ts`, `server/lib/owner.ts`. Pruebas en `tests/api.test.ts` (CMS, fuentes, librería de íconos), `tests/owner.test.ts` (acceso del propietario) y `tests/lib.test.ts`.
+
+## Pasarelas de pago (Operación → Pasarelas de pago)
+
+1. **Tarjeta de prueba** (activa por defecto): no cobra dinero real.
+2. **Payphone:** «Gestionar» → pega el **Token** y el **Store ID** de tu cuenta de Payphone → Guardar → activa el interruptor y confirma el Go/No-Go. Para guardar credenciales desde el CMS necesitas el secreto `BUSCADR_SECRETS_KEY` en Cloudflare (una sola vez); quedan cifradas y solo verás «••••1234». Verifica los endpoints con la documentación vigente de Payphone antes de cobrar.
+3. **Transferencia bancaria:** «Gestionar» → banco, tipo y número de cuenta, titular, RUC → Guardar → activar. El paciente ve los datos con botones de copiar y la referencia `BDR-XXXXXXXX`, registra su comprobante y tú confirmas en **Administración → Transacciones → Confirmar** cuando veas el dinero (o «Rechazar» con un motivo).
+4. **Pago en el consultorio:** si lo desactivas, todas las citas con tarifa se pagan en línea.
+5. El orden (flechas) define el medio predeterminado en el checkout. Los cambios se aplican al instante y quedan en el historial de actividad (sin los valores de las credenciales).
+
+## Especialidades y categorías
+
+- Busca o filtra por categoría; «Editar» abre nombre, profesional, categoría, palabras de búsqueda, ícono y tono.
+- **Agregar especialidad:** nombre, profesional, categoría y palabras de búsqueda (sin tildes, separadas por espacios). Toma el ícono y el tono de su categoría.
+- **Agregar categoría** al final de la página. Una categoría propia solo se elimina si no tiene especialidades.
+- Una especialidad que ya usan profesionales se **oculta**, no se elimina. Publica para que los cambios lleguen al sitio y al formulario de los profesionales.

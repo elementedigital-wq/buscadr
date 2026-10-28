@@ -422,3 +422,159 @@ describe("CMS Maestro", () => {
     expect((await browser.get("/api/auth/me")).data.user).toBeNull();
   });
 });
+
+describe("taxonomía médica", () => {
+  it("incluye la taxonomía completa agrupada por categoría", async () => {
+    const cat = await new Browser().get("/api/catalog");
+    expect(cat.data.specialties.length).toBeGreaterThanOrEqual(80);
+    expect(cat.data.categories.length).toBeGreaterThanOrEqual(10);
+    const slugs = new Set(cat.data.categories.map((c: { slug: string }) => c.slug));
+    expect(cat.data.specialties.every((s: { category: string }) => slugs.has(s.category))).toBe(true);
+    const search = await new Browser().get(`/api/practitioners?q=${encodeURIComponent("necesito brackets")}`);
+    expect(search.data.specialty).toBe("ortodoncia");
+  });
+
+  it("el CMS agrega categorías y especialidades propias que usan el directorio y los profesionales", async () => {
+    const adm = await admin();
+    const site = await adm.get("/api/cms/site");
+    const d = site.data.draft;
+    const config = {
+      ...d,
+      categories: [
+        ...d.categories,
+        { slug: "medicina-integrativa", name: "Medicina integrativa", icon: "spa", tone: "verde", visible: true, order: 50, custom: true },
+        // Slug inválido o que choca con uno base: se descarta.
+        { slug: "../hack", name: "Hack", custom: true },
+        { slug: "odontologia", name: "Duplicada", custom: true },
+      ],
+      specialties: [
+        ...d.specialties,
+        {
+          slug: "medicina-hiperbarica",
+          name: "Medicina hiperbárica",
+          professional: "Especialista en medicina hiperbárica",
+          category: "medicina-integrativa",
+          icon: "wind",
+          tone: "cielo",
+          keywords: "Oxígeno cámara heridas <script>",
+          visible: true,
+          order: 5,
+          custom: true,
+        },
+        { slug: "pediatria", name: "Pediatría falsa", custom: true },
+      ],
+    };
+    expect((await adm.put("/api/cms/site", { config, expectedVersion: site.data.version })).status).toBe(200);
+    expect((await adm.post("/api/cms/publish")).status).toBe(200);
+
+    const cat = await new Browser().get("/api/catalog");
+    const hyper = cat.data.specialties.find((s: { slug: string }) => s.slug === "medicina-hiperbarica");
+    expect(hyper).toMatchObject({ name: "Medicina hiperbárica", category: "medicina-integrativa", custom: true });
+    expect(cat.data.categories.some((c: { slug: string }) => c.slug === "medicina-integrativa")).toBe(true);
+    expect(cat.data.categories.some((c: { slug: string }) => c.slug === "../hack")).toBe(false);
+    expect(cat.data.specialties.filter((s: { slug: string }) => s.slug === "pediatria")).toHaveLength(1);
+    expect(cat.data.specialties.find((s: { slug: string }) => s.slug === "pediatria").name).not.toBe("Pediatría falsa");
+    // Palabras clave saneadas: sin etiquetas ni tildes, sirven para entender búsquedas libres.
+    expect((await new Browser().get(`/api/practitioners?q=${encodeURIComponent("cámara de oxígeno")}`)).data.specialty).toBe("medicina-hiperbarica");
+
+    // Un profesional puede elegirla; una inexistente se rechaza.
+    const { browser } = await register("pro");
+    const bad = await browser.post("/api/pro/me", { display_name: "Prueba Hiperbárica", specialty: "no-existe", city: "Guayaquil" });
+    expect(bad.status).toBe(400);
+    const ok = await browser.post("/api/pro/me", { display_name: "Prueba Hiperbárica", specialty: "medicina-hiperbarica", city: "Guayaquil" });
+    expect(ok.status).toBe(201);
+    expect(ok.data.practitioner.specialty_name).toBe("Medicina hiperbárica");
+  });
+});
+
+describe("pasarelas de pago (CMS)", () => {
+  const adminPut = async (adm: Browser, id: string, body: Record<string, unknown>) => adm.put(`/api/cms/payments/${id}`, body);
+
+  it("credenciales cifradas que nunca se devuelven y activación con datos completos y confirmación de cobro real", async () => {
+    const { browser } = await register("patient");
+    expect((await browser.get("/api/cms/payments")).status).toBe(403);
+    const adm = await admin();
+    const list = await adm.get("/api/cms/payments");
+    expect(list.data.gateways.map((g: { id: string }) => g.id).sort()).toEqual(["consultorio", "payphone", "sandbox", "transferencia"]);
+    expect(list.data.coming_soon.length).toBeGreaterThan(0);
+    expect(list.data.secrets_key).toBe(true);
+
+    expect((await adminPut(adm, "payphone", { enabled: true })).data.code).toBe("GATEWAY_INCOMPLETE");
+    const saved = await adminPut(adm, "payphone", { secrets: { token: "tok-secreto-123456", store_id: "tienda-987654" } });
+    expect(saved.status).toBe(200);
+    expect(JSON.stringify(saved.data)).not.toContain("tok-secreto");
+    const pp = saved.data.gateways.find((g: { id: string }) => g.id === "payphone");
+    expect(pp.secrets.find((s: { key: string }) => s.key === "token")).toMatchObject({ source: "cms", preview: "••••3456" });
+    const row = await db.prepare("SELECT secrets_enc FROM payment_gateways WHERE id='payphone'").first<{ secrets_enc: string }>();
+    expect(row?.secrets_enc).toMatch(/^v1:/);
+    expect(row?.secrets_enc).not.toContain("tok-secreto");
+    // Cobra dinero real: pide confirmación expresa (Go/No-Go).
+    expect((await adminPut(adm, "payphone", { enabled: true })).data.code).toBe("CONFIRM_LIVE");
+    expect((await adminPut(adm, "payphone", { enabled: true, confirm_live: true })).status).toBe(200);
+    expect((await new Browser().get("/api/catalog")).data.gateways.some((g: { id: string }) => g.id === "payphone")).toBe(true);
+    // La auditoría registra el cambio sin los valores.
+    const audit = await db.prepare("SELECT details FROM cms_audit WHERE action='payment_gateway' ORDER BY id DESC LIMIT 5").all<{ details: string }>();
+    expect(audit.results.map((r) => r.details).join(" ")).not.toContain("tok-secreto");
+    expect((await adminPut(adm, "payphone", { enabled: false, secrets: { token: null, store_id: null } })).status).toBe(200);
+  });
+
+  it("transferencia bancaria: el paciente la elige, registra el comprobante y la administración la confirma", async () => {
+    const adm = await admin();
+    const bank = { bank: "Banco Pichincha", account_type: "Ahorros", account_number: "2201234567", holder: "buscaDR S.A.S.", id_number: "0999999999001" };
+    expect((await adminPut(adm, "transferencia", { settings: { ...bank, account_type: "Plazo fijo" } })).status).toBe(400);
+    expect((await adminPut(adm, "transferencia", { settings: bank, enabled: true, confirm_live: true })).status).toBe(200);
+
+    const { pro, id } = await publishedPractitioner();
+    const patient = await register("patient");
+    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
+    const payId = res.data.checkout.split("/").pop();
+    const view = await patient.browser.get(`/api/payments/${payId}`);
+    const transfer = view.data.methods.find((m: { id: string }) => m.id === "transferencia");
+    expect(transfer.bank.account_number).toBe("2201234567");
+    expect((await patient.browser.post(`/api/payments/${payId}/method`, { gateway: "kushki" })).status).toBe(400);
+    expect((await patient.browser.post(`/api/payments/${payId}/method`, { gateway: "transferencia" })).status).toBe(200);
+    const pending = await patient.browser.get(`/api/payments/${payId}`);
+    expect(pending.data.payment).toMatchObject({ gateway: "transferencia", status: "pendiente" });
+    expect(pending.data.payment.reference).toMatch(/^BDR-[0-9A-F]{8}$/);
+    // La retención del horario se alarga (la confirmación es manual).
+    const hold = await db.prepare("SELECT hold_expires_ms FROM appointments WHERE id=?").bind(res.data.id).first<{ hold_expires_ms: number }>();
+    expect((hold?.hold_expires_ms ?? 0) - Date.now()).toBeGreaterThan(60 * 60_000);
+    // Ya no se puede pagar con la tarjeta de prueba sin volver a elegirla.
+    expect((await patient.browser.post(`/api/payments/${payId}/sandbox`, { number: "4111 1111 1111 1111", exp: "12/30", cvv: "123", name: "P" })).status).toBe(
+      409,
+    );
+    expect((await patient.browser.post(`/api/payments/${payId}/transfer`, { receipt: "12" })).status).toBe(400);
+    expect((await patient.browser.post(`/api/payments/${payId}/transfer`, { receipt: "COMP-778899" })).status).toBe(200);
+    // Solo la administración confirma.
+    expect((await pro.browser.post(`/api/admin/payments/${payId}/transfer`, { decision: "approve" })).status).toBe(403);
+    const ok = await adm.post(`/api/admin/payments/${payId}/transfer`, { decision: "approve" });
+    expect(ok.data.status).toBe("aprobado");
+    const appt = await db.prepare("SELECT payment_status FROM appointments WHERE id=?").bind(res.data.id).first<{ payment_status: string }>();
+    expect(appt?.payment_status).toBe("pagado");
+    const income = await pro.browser.get("/api/pro/income");
+    expect(income.data.totals.online_cents).toBeGreaterThan(0);
+    expect((await adminPut(adm, "transferencia", { enabled: false })).status).toBe(200);
+  });
+
+  it("sin pago en el consultorio la cita se paga en línea; sin medios en línea, en el consultorio", async () => {
+    const adm = await admin();
+    const { id } = await publishedPractitioner();
+    const patient = await register("patient");
+    expect((await adminPut(adm, "consultorio", { enabled: false })).status).toBe(200);
+    const online = await patient.browser.post("/api/appointments", {
+      practitioner_id: id,
+      start: weekday(4, 9),
+      modality: "presencial",
+      idempotency_key: key(),
+    });
+    expect(online.data.checkout).toMatch(/^\/pagar\//);
+    expect((await adminPut(adm, "consultorio", { enabled: true })).status).toBe(200);
+    expect((await adminPut(adm, "sandbox", { enabled: false })).status).toBe(200);
+    const office = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(4, 10), modality: "virtual", idempotency_key: key() });
+    expect(office.status).toBe(201);
+    expect(office.data.checkout).toBeNull();
+    const row = await db.prepare("SELECT payment_mode FROM appointments WHERE id=?").bind(office.data.id).first<{ payment_mode: string }>();
+    expect(row?.payment_mode).toBe("consultorio");
+    expect((await adminPut(adm, "sandbox", { enabled: true })).status).toBe(200);
+  });
+});

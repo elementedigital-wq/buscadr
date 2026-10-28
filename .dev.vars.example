@@ -14,3 +14,4 @@ BUSCADR_ADMIN_PASSWORD="cambia-esta-clave-local"
 # BUSCADR_SUPPORT_WHATSAPP=""  # número de WhatsApp Business de buscaDR (0991234567)
 # PAYPHONE_TOKEN=""            # pasarela real (Payphone Ecuador); sin él, pagos en modo sandbox
 # PAYPHONE_STORE_ID=""
+# BUSCADR_SECRETS_KEY=""       # 32+ caracteres: cifra las credenciales de pasarelas guardadas desde el CMS

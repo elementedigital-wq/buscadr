@@ -15,7 +15,7 @@ import {
   FREE_CANCEL_MS,
   OVERLAP_SQL,
   PAYMENT_HOLD_MS,
-  PAYMENT_LABEL,
+  paymentLabel,
   type PaymentStatus,
   type Role,
   STATUS_LABEL,
@@ -36,7 +36,9 @@ import { clean, fail } from "../lib/http";
 import { isGatewayId, paymentOptions } from "../lib/gateways";
 import { ONLINE_SQL, type PaymentRow, createPayment, holdForTransfer, nowText, startCheckout } from "../lib/payments";
 import { type PractitionerRow, fullName, patientShortName } from "../lib/practitioners";
-import { feeBps, priceFor } from "../lib/pricing";
+import { moveEarnings, releaseEarnings } from "../lib/payouts";
+import { priceFor } from "../lib/pricing";
+import { getPayoutSettings } from "../lib/settings";
 import { RULES, hit } from "../lib/rate-limit";
 import { notifyNewRequest, notifyPatient, refundPayment } from "../lib/settle";
 import { daySlots, type Modality } from "../lib/slots";
@@ -64,6 +66,7 @@ export async function completeAppointment(
     .prepare("INSERT OR IGNORE INTO care_stages(appointment_id,stage,confirmed_ms,actor_id,actor_role,method) VALUES(?,?,?,?,?,?)")
     .bind(a.id, "cierre", Date.now(), actor.id, actor.role, method)
     .run();
+  await releaseEarnings(env, a.id);
   const lite = { id: a.id, patient_id: a.patient_id, start_ms: a.start_ms, name: fullName(p), demo: p.demo };
   // Se devuelve envuelta para que el llamador decida si espera el aviso (waitUntil).
   return {
@@ -146,7 +149,7 @@ async function assertOffered(db: D1Database, p: PractitionerRow, start: number, 
 }
 
 /** Inserción condicional ATÓMICA de una cita (sin solapes ni bloqueos). */
-async function insertAppointment(
+export async function insertAppointment(
   db: D1Database,
   v: {
     p: PractitionerRow;
@@ -250,16 +253,15 @@ appointments.post("/", async (c) => {
   await assertOffered(db, p, start, modality, now);
 
   const reason = clean(b.reason, 160);
-  const prepay = modality === "virtual" ? !!p.prepay_virtual : !!p.prepay_in_person;
   const basePrice = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
-  // Medios de pago activos en el CMS (ADR 0013): sin medios en línea se paga en el consultorio; con el
-  // pago en consultorio desactivado, se paga en línea al reservar.
-  const options = await paymentOptions(c.env);
-  let online = basePrice > 0 && (prepay || b.payment_mode === "en_linea");
-  if (online && !options.online.length) online = false;
-  if (!online && basePrice > 0 && !options.office && options.online.length) online = true;
+  // Solo tarjeta (ADR 0016): toda cita con tarifa se paga con tarjeta al reservar; buscaDR cobra y
+  // liquida al profesional su parte. Sin medios con tarjeta activos no se puede reservar.
+  const [options, settings] = await Promise.all([paymentOptions(c.env), getPayoutSettings(c.env)]);
+  const online = basePrice > 0;
+  if (online && !p.demo && !options.online.length)
+    fail(503, "Los pagos con tarjeta no están disponibles en este momento. Inténtalo más tarde.", "NO_CARD_GATEWAY");
   const gateway = isGatewayId(b.gateway) && options.online.some((g) => g.id === b.gateway) ? b.gateway : undefined;
-  const price = priceFor(p, modality, online, feeBps(c.env));
+  const price = priceFor(p, modality, online, settings.fee_bps);
   const instant = !!p.auto_confirm || !!p.demo;
   // Con pago previo, el horario se retiene 30 min mientras se paga; luego espera la confirmación.
   const status: AppointmentStatus = instant && !online ? "confirmada" : "solicitada";
@@ -303,6 +305,7 @@ appointments.post("/", async (c) => {
       fee_cents: price.fee_cents,
       net_cents: price.net_cents,
       gateway,
+      demo: !!p.demo,
     });
     if (pay.gateway === "transferencia") await holdForTransfer(db, id, start);
     const row = await db.prepare("SELECT * FROM payments WHERE id=?").bind(pay.id).first<PaymentRow>();
@@ -343,8 +346,17 @@ appointments.post("/", async (c) => {
 
 const LIST_SELECT = `SELECT a.id,a.status,a.start_ms,a.end_ms,a.modality,a.price_cents,a.net_cents,a.payment_mode,a.payment_status,a.hold_expires_ms,a.patient_name,a.created_at,
   p.slug,p.title,p.display_name,p.specialty,p.photo,p.city,p.sector,p.demo,
-  (SELECT COUNT(*) FROM messages m WHERE m.appointment_id=a.id) AS messages
+  (SELECT COUNT(*) FROM messages m WHERE m.appointment_id=a.id) AS messages,
+  (SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) FROM followup_sessions s WHERE s.appointment_id=a.id) AS followup
   FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id`;
+
+/** «plan:sesión:total» → referencia a la serie de citas subsecuentes (ADR 0017). */
+const followupRef = (v: unknown) => {
+  const [plan, seq, total] = String(v ?? "")
+    .split(":")
+    .map(Number);
+  return plan ? { plan_id: plan, seq, total } : null;
+};
 
 export function listView(r: Record<string, any>, as: "patient" | "pro") {
   return {
@@ -358,10 +370,11 @@ export function listView(r: Record<string, any>, as: "patient" | "pro") {
     net_cents: r.net_cents,
     payment_mode: r.payment_mode,
     payment_status: r.payment_status,
-    payment_label: PAYMENT_LABEL[r.payment_status as PaymentStatus] ?? r.payment_status,
+    payment_label: paymentLabel(r),
     hold_expires_ms: r.hold_expires_ms,
     created_at: r.created_at,
     messages: r.messages ?? 0,
+    followup: followupRef(r.followup),
     demo: !!r.demo,
     practitioner: {
       slug: r.slug,
@@ -412,6 +425,12 @@ appointments.get("/:id", async (c) => {
       .all<Record<string, any>>(),
     db.prepare("SELECT name FROM users WHERE id=?").bind(a.patient_id).first<{ name: string }>(),
   ]);
+  const followup = await db
+    .prepare(
+      "SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) AS v FROM followup_sessions s WHERE s.appointment_id=?",
+    )
+    .bind(a.id)
+    .first<{ v: string }>();
   const demo = !!p.demo;
   const confirmed = ["confirmada", "completada"].includes(a.status);
   const now = Date.now();
@@ -435,12 +454,13 @@ appointments.get("/:id", async (c) => {
       net_cents: role === "patient" ? a.price_cents : a.net_cents,
       payment_mode: a.payment_mode,
       payment_status: a.payment_status,
-      payment_label: PAYMENT_LABEL[a.payment_status],
+      payment_label: paymentLabel(a),
       created_at: a.created_at,
       confirmed_at: a.confirmed_at,
       completed_at: a.completed_at,
       cancel_reason: a.cancel_reason,
       rescheduled_from: a.rescheduled_from,
+      followup: followupRef(followup?.v),
       // Código de llegada: el paciente lo muestra en recepción; el profesional lo puede verificar.
       checkin_code: confirmed && a.modality === "presencial" ? a.checkin_code : null,
       actions: availableActions(a, role, { demo, reviewed: !!review }),
@@ -507,7 +527,7 @@ appointments.get("/:id/ics", async (c) => {
 
 /* ------------------------------------------------------------------ Acciones */
 
-async function transition(db: D1Database, a: AppointmentRow, to: AppointmentStatus, extra: Record<string, unknown> = {}) {
+export async function transition(db: D1Database, a: AppointmentRow, to: AppointmentStatus, extra: Record<string, unknown> = {}) {
   const sets = ["status=?", "updated_at=CURRENT_TIMESTAMP", ...Object.keys(extra).map((k) => `${k}=?`)];
   const res = await db
     .prepare(`UPDATE appointments SET ${sets.join(",")} WHERE id=? AND status=?`)
@@ -516,7 +536,7 @@ async function transition(db: D1Database, a: AppointmentRow, to: AppointmentStat
   if (!res.meta.changes) fail(409, "La cita cambió mientras tanto. Recarga la página.");
 }
 
-const approvedPayment = (db: D1Database, appointmentId: number) =>
+export const approvedPayment = (db: D1Database, appointmentId: number) =>
   db
     .prepare(`SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND ${ONLINE_SQL()} ORDER BY approved_at DESC LIMIT 1`)
     .bind(appointmentId)
@@ -577,6 +597,8 @@ appointments.post("/:id/actions/:action", async (c) => {
       // Reembolso: siempre si cancela el profesional; si cancela el paciente, hasta 4 h antes.
       const refundable = paid && (role !== "patient" || Date.now() <= a.start_ms - FREE_CANCEL_MS);
       if (refundable) await refundPayment(c.env, paid, role === "patient" ? "Cancelada por el paciente a tiempo" : "Cancelada por el profesional");
+      // Cancelación tardía sin reembolso: el profesional conserva su parte.
+      else if (paid) await releaseEarnings(c.env, a.id);
       response = { refunded: !!refundable, refundable_policy: paid && !refundable ? "Cancelaste con menos de 4 h: el pago no es reembolsable." : null };
       if (role === "patient" && !demo) {
         c.executionCtx.waitUntil(
@@ -614,6 +636,7 @@ appointments.post("/:id/actions/:action", async (c) => {
       break;
     case "no_show":
       await transition(db, a, TRANSITIONS.no_show.to);
+      await releaseEarnings(c.env, a.id);
       break;
     case "mark_paid": {
       // Pago recibido en el consultorio: queda registrado en el libro de transacciones (sin comisión).
@@ -654,6 +677,7 @@ appointments.post("/:id/actions/:action", async (c) => {
           amount_cents: a.price_cents,
           fee_cents: a.fee_cents,
           net_cents: a.net_cents,
+          demo,
         });
         pay = await db.prepare("SELECT * FROM payments WHERE id=?").bind(created.id).first<PaymentRow>();
       }
@@ -705,6 +729,8 @@ appointments.post("/:id/actions/:action", async (c) => {
       // El pago (si lo hubo) acompaña a la cita nueva.
       await db.batch([
         db.prepare("UPDATE payments SET appointment_id=?,updated_at=CURRENT_TIMESTAMP WHERE appointment_id=?").bind(inserted.id, a.id),
+        moveEarnings(db, a.id, inserted.id),
+        db.prepare("UPDATE followup_sessions SET appointment_id=? WHERE appointment_id=?").bind(inserted.id, a.id),
         event(db, inserted.id, "reprogramada_desde", user.id, { from: a.id, was_confirmed: confirmedBefore }),
       ]);
       await track(db, "booking_rescheduled", { userId: user.id, appointmentId: inserted.id, practitionerId: p.id });

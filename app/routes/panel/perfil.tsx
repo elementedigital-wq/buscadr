@@ -59,8 +59,6 @@ export default function Perfil() {
           virtual_enabled: virtual,
           price_in_person_cents: cents(f.get("price_in_person")),
           price_virtual_cents: cents(f.get("price_virtual")),
-          prepay_virtual: f.get("prepay_virtual") === "on",
-          prepay_in_person: f.get("prepay_in_person") === "on",
           phone: f.get("phone"),
           whatsapp_opt_in: f.get("whatsapp_opt_in") === "on",
         },
@@ -243,36 +241,18 @@ export default function Perfil() {
             Modalidades y tarifas
           </h2>
           <p className="text-sm muted">
-            Puedes cobrar distinto la cita presencial y la virtual. buscaDR cobra {fee} % solo en citas pagadas en línea; el pago en consultorio no tiene
-            comisión.
+            Puedes cobrar distinto la cita presencial y la virtual. El paciente paga con tarjeta al reservar; buscaDR cobra, retiene su comisión ({fee} %) y te
+            transfiere tu parte a tu cuenta (
+            <Link to="/panel/ingresos" className="font-semibold text-azul-ink underline">
+              Ingresos y liquidaciones
+            </Link>
+            ).
           </p>
         </div>
         {[
-          [
-            "presencial",
-            "Cita presencial",
-            "clinic",
-            inPerson,
-            setInPerson,
-            "price_in_person",
-            p.price_in_person_cents,
-            "prepay_in_person",
-            p.prepay_in_person,
-            "Cobrar en línea al reservar",
-          ],
-          [
-            "virtual",
-            "Cita virtual (videollamada)",
-            "video",
-            virtual,
-            setVirtual,
-            "price_virtual",
-            p.price_virtual_cents,
-            "prepay_virtual",
-            p.prepay_virtual,
-            "Cobrar en línea al reservar (recomendado)",
-          ],
-        ].map(([key, label, icon, on, setOn, priceName, price, prepayName, prepay, prepayLabel]) => (
+          ["presencial", "Cita presencial", "clinic", inPerson, setInPerson, "price_in_person", p.price_in_person_cents],
+          ["virtual", "Cita virtual (videollamada)", "video", virtual, setVirtual, "price_virtual", p.price_virtual_cents],
+        ].map(([key, label, icon, on, setOn, priceName, price]) => (
           <fieldset key={key as string} className={`grid gap-3 rounded-2xl p-4 ring-1 ${on ? "bg-white ring-azul/30" : "bg-fondo ring-tinta/5"}`}>
             <legend className="sr-only">{label as string}</legend>
             <label className="flex items-center justify-between gap-3">
@@ -303,19 +283,9 @@ export default function Perfil() {
               </span>
               {(price as number) > 0 && (
                 <span className="text-xs font-normal muted">
-                  Recibes {money(Math.round((price as number) * (1 - fee / 100)))} si el paciente paga en línea.
+                  Recibes {money(Math.round((price as number) * (1 - fee / 100)))} por cita (tarifa menos la comisión).
                 </span>
               )}
-            </label>
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                name={prepayName as string}
-                defaultChecked={prepay as boolean}
-                disabled={!on}
-                className="mt-0.5 size-4 accent-[var(--color-azul)]"
-              />
-              <span>{prepayLabel as string}</span>
             </label>
           </fieldset>
         ))}

@@ -140,6 +140,7 @@
   overflow-wrap: anywhere;
   &[aria-pressed="true"],
   &[aria-current="true"],
+  &[aria-selected="true"],
   &[aria-checked="true"] {
     @apply bg-azul text-white ring-azul;
   }

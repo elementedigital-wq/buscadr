@@ -1,5 +1,25 @@
 # Cambios
 
+## 1.4.0 — 28-oct-2026 · Cobro solo con tarjeta, liquidación al médico y citas subsecuentes
+
+### Cobro con tarjeta y liquidación (ADR 0016)
+- **Solo tarjeta de crédito o débito.** Toda cita con tarifa se paga al reservar. Ya no existen el pago en consultorio ni la transferencia del paciente: en el CMS aparecen como «No permitido» y no se pueden activar. Siempre queda un medio con tarjeta activo. Los perfiles de muestra usan siempre la tarjeta de prueba.
+- **buscaDR cobra y liquida al profesional su parte** (tarifa menos comisión). Su parte queda retenida hasta la cita, disponible unos días después de atenderla y se transfiere en cada liquidación con referencia bancaria y aviso. Los reembolsos posteriores se descuentan con un ajuste.
+- **CMS → Pasarelas de pago → Comisión y liquidaciones:** comisión (%), días de retención y monto mínimo, con un ejemplo en vivo.
+- **Administración → Liquidaciones:** saldos por profesional, generar liquidaciones, archivo de transferencias (CSV), registrar la transferencia o anular la liquidación. Los cobros de prueba se liquidan aparte.
+- **Panel → Ingresos y liquidaciones:** saldos (disponible, por liberar, citas por realizar, transferido), «Cómo recibes tu dinero», **cuenta bancaria cifrada** (se muestra enmascarada), liquidaciones, tu parte por cita y aviso de citas pasadas sin marcar.
+- Perfil y tarifas: se quitan las opciones de «pago previo» y se muestra cuánto recibe el profesional por cita. Textos públicos actualizados (cómo funciona, planes, para profesionales).
+
+### Citas subsecuentes (ADR 0017)
+- **Panel → Subsecuentes:** programar series de controles (prenatal, crónicos, terapias, curaciones…). Se eligen paciente, nombre, modalidad, primera sesión, frecuencia, número de sesiones, tarifa y nota privada. Las fechas se revisan contra la agenda antes de enviar (ocupada, bloqueo, fuera de horario) y se pueden editar.
+- El paciente recibe la propuesta en **Mis citas** y en `/seguimientos/:id`, la acepta (se agendan todas como confirmadas) o la rechaza. Paga cada sesión con tarjeta hasta 24 h antes, con recordatorio. Las sesiones no pagadas se liberan solas.
+- Indicadores: series en curso, pacientes en seguimiento, sesiones en 30 días, asistencia. Sesiones «por reagendar» si el horario se ocupó. Cancelación en bloque con reembolso. Etiqueta «Seguimiento n de N» en cada cita y «Programar subsecuentes» en el detalle de la cita.
+
+### Técnico
+- Migración aditiva `0008_liquidaciones_subsecuentes.sql` (`platform_settings`, `earnings`, `payouts`, cuenta cifrada del profesional, `followup_plans`, `followup_sessions`; incluye en el libro los cobros con tarjeta ya aprobados).
+- API `/api/pro/payouts`, `/api/admin/payouts`, `/api/pro/followups`, `/api/followups`. El cron libera las sesiones no pagadas, vence las propuestas y envía los recordatorios de pago.
+- 60 pruebas (nuevas: solo tarjeta, comisión editable, liquidación de punta a punta con cuenta cifrada y ajuste por reembolso, cancelación tardía, series aceptadas, pagadas, liberadas y canceladas, conflictos y reagendamiento). Recorrido en navegador real de reserva y pago, serie, cuenta y liquidaciones. Maquetación (8 anchos, ahora con las pestañas de Administración y las series) y accesibilidad sin problemas.
+
 ## 1.3.0 — 28-oct-2026 · Trazabilidad de la atención con QR y satisfacción por etapa
 
 ### Trazabilidad

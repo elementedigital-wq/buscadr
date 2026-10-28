@@ -8,6 +8,7 @@ import { PLAN_MAP } from "./catalog";
 import { track } from "./events";
 import { notify, recipient } from "./notify";
 import { type ConfirmResult, PLAN_PERIOD_MS, type PaymentRow, nowText, paymentEvent, refundWithProvider } from "./payments";
+import { recordEarning, voidEarning } from "./payouts";
 import { money } from "./pricing";
 import { formatLong } from "./time";
 
@@ -174,7 +175,7 @@ export async function settlePayment(env: Env, origin: string, payment: PaymentRo
           `UPDATE appointments SET payment_status='pagado',updated_at=CURRENT_TIMESTAMP,
              status=CASE WHEN ?1=1 THEN 'confirmada' ELSE status END,
              confirmed_at=CASE WHEN ?1=1 THEN CURRENT_TIMESTAMP ELSE confirmed_at END,
-             hold_expires_ms=CASE WHEN ?1=1 THEN NULL WHEN status='solicitada' THEN ?2 ELSE hold_expires_ms END
+             hold_expires_ms=CASE WHEN ?1=1 OR status='confirmada' THEN NULL WHEN status='solicitada' THEN ?2 ELSE hold_expires_ms END
            WHERE id=?3`,
         )
         .bind(confirm ? 1 : 0, holdUntil(now, a.start_ms), a.id),
@@ -182,6 +183,8 @@ export async function settlePayment(env: Env, origin: string, payment: PaymentRo
         .prepare("INSERT INTO appointment_events(appointment_id,type,actor_id,detail) VALUES(?,?,?,?)")
         .bind(a.id, "pago_aprobado", payment.payer_id, JSON.stringify({ payment: payment.id })),
     ]);
+    // Parte del profesional (importe menos comisión): retenida hasta que la cita ocurra (ADR 0016).
+    await recordEarning(env, payment);
     await notifyPatient(
       env,
       origin,
@@ -213,6 +216,7 @@ export async function refundPayment(env: Env, payment: PaymentRow, reason: strin
       ? [db.prepare("UPDATE appointments SET payment_status='reembolsado',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(payment.appointment_id)]
       : []),
   ]);
+  await voidEarning(env, payment);
   await track(db, "payment_refunded", { userId: payment.payer_id, appointmentId: payment.appointment_id });
   return true;
 }

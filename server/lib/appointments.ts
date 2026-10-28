@@ -25,11 +25,17 @@ export const STATUS_LABEL: Record<AppointmentStatus, string> = {
 
 export const PAYMENT_LABEL: Record<PaymentStatus, string> = {
   no_requerido: "Pago en el consultorio",
-  pendiente: "Pago pendiente",
-  pagado: "Pagada en línea",
+  pendiente: "Pago con tarjeta pendiente",
+  pagado: "Pagada",
   reembolsado: "Reembolsada",
   fallido: "Pago no aprobado",
 };
+
+/** Etiqueta del pago; las citas sin tarifa no requieren pago («Sin costo»). */
+export const paymentLabel = (a: { payment_status?: unknown; price_cents?: unknown }) =>
+  a.payment_status === "no_requerido" && Number(a.price_cents) <= 0
+    ? "Sin costo"
+    : (PAYMENT_LABEL[a.payment_status as PaymentStatus] ?? String(a.payment_status));
 
 /** El profesional tiene hasta 24 h (o hasta 1 h antes de la cita) para confirmar una solicitud. */
 export const HOLD_MS = 24 * HOUR;

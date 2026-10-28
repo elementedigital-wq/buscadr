@@ -38,7 +38,7 @@ const PUBLIC = [
   "/no-existe",
 ];
 const PATIENT = ["/", "/citas", "/favoritos", "/notificaciones", "/cuenta", "/doctor/dr-andres-salazar"];
-const PRO = ["/panel", "/panel/agenda", "/panel/escanear", "/panel/calidad", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
+const PRO = ["/panel", "/panel/agenda", "/panel/subsecuentes", "/panel/escanear", "/panel/calidad", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
 
 /** Corre en la página: devuelve problemas de maquetación visibles. */
 function audit() {
@@ -146,6 +146,15 @@ async function run(name, setup, paths) {
       await page.goto(base + path, { waitUntil: "networkidle" }).catch(() => {});
       await page.waitForTimeout(250);
       for (const issue of await auditPage(page)) report.push(`[${name} ${w}px] ${path}: ${issue}`);
+      // Administración: cada pestaña (KPIs, transacciones, liquidaciones…).
+      if (path === "/admin") {
+        const tabs = await page.$$("[role=tab]");
+        for (let i = 0; i < tabs.length; i++) {
+          await (await page.$$("[role=tab]"))[i]?.click().catch(() => {});
+          await page.waitForTimeout(400);
+          for (const issue of await auditPage(page)) report.push(`[${name} ${w}px] /admin#${i}: ${issue}`);
+        }
+      }
       // CMS: además de la portada del editor, cada pestaña.
       if (path === "/maestro") {
         for (const tab of await page.$$eval("[data-tab]", (els) => els.map((e) => e.getAttribute("data-tab")))) {
@@ -197,30 +206,41 @@ async function setupAccounts() {
     if (admin.email && admin.password && proId) {
       await call("POST", "/api/auth/login", admin);
       await call("POST", `/api/admin/practitioners/${proId}/review`, { decision: "approve" });
-      // Transferencia bancaria activa: el checkout muestra la lista de medios y los datos para transferir.
-      await call("PUT", "/api/cms/payments/transferencia", {
-        settings: { bank: "Banco Pichincha", account_type: "Ahorros", account_number: "2201234567", holder: "buscaDR Servicios de Salud S.A.S.", id_number: "0999999999001" },
-        enabled: true,
-        confirm_live: true,
-      });
       await call("POST", "/api/auth/logout");
     }
-    // Paciente con una cita presencial (perfil de muestra: se confirma sola) y una virtual con pago pendiente.
+    const card = { number: "4111 1111 1111 1111", exp: "12/30", cvv: "123", name: "Maria Villavicencio" };
+    const pay = (checkout) => (checkout?.startsWith("/pagar/") ? call("POST", `/api/payments/${checkout.split("/").pop()}/sandbox`, card) : null);
+    // Paciente con una cita presencial pagada (perfil de muestra: se confirma sola) y una virtual con pago pendiente.
     const patient = `layout-pac-${stamp}@test.ec`;
     await call("POST", "/api/auth/register", { name: "María Fernanda Villavicencio Altamirano", email: patient, password: "contrasena-prueba-123", role: "patient", acceptTerms: true });
     const a = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(2, 10), modality: "presencial", idempotency_key: key(), reason: "Control general y revisión de exámenes de laboratorio recientes." });
+    await pay(a.checkout);
     if (a.id) await call("POST", `/api/appointments/${a.id}/messages`, { body: "Hola doctor, ¿debo llevar los exámenes impresos o basta con el PDF en el celular?" });
     const v = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
-    const t = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(4, 17), modality: "virtual", idempotency_key: key() });
-    const transferCheckout = t.checkout?.startsWith("/pagar/") ? t.checkout : null;
-    if (transferCheckout && admin.email) await call("POST", `/api/payments/${transferCheckout.split("/").pop()}/method`, { gateway: "transferencia" });
     await call("PUT", "/api/me/favorites/4");
     let proAppointment = null;
+    const plans = [];
     if (admin.email && proId) {
-      proAppointment = (await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(2, 11), modality: "presencial", idempotency_key: key(), reason: "Control de niño sano" })).id;
+      const booked = await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(2, 11), modality: "presencial", idempotency_key: key(), reason: "Control de niño sano" });
+      proAppointment = booked.id;
+      await pay(booked.checkout);
       await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(3, 9), modality: "presencial", idempotency_key: key() });
+      // El profesional confirma y programa dos series de citas subsecuentes (una se acepta, otra queda propuesta).
+      await call("POST", "/api/auth/logout");
+      await call("POST", "/api/auth/login", { email: pro, password: "contrasena-prueba-123" });
+      await call("POST", `/api/appointments/${proAppointment}/actions/confirm`);
+      for (const [first, days, n, price, title] of [
+        [weekday(6, 9), 7, 4, 3500, "Control de crecimiento y desarrollo con nombre extenso"],
+        [weekday(9, 15), 30, 6, 0, "Control mensual"],
+      ]) {
+        const r = await call("POST", "/api/pro/followups", { patient_ref: proAppointment, title, note: "Traer el carné de vacunas.", modality: "presencial", interval_days: days, first_start: first, sessions: n, price_cents: price });
+        if (r.id) plans.push(r.id);
+      }
+      await call("POST", "/api/auth/logout");
+      await call("POST", "/api/auth/login", { email: patient, password: "contrasena-prueba-123" });
+      if (plans[0]) await call("POST", `/api/followups/${plans[0]}/accept`);
     }
-    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout, transferCheckout, proAppointment };
+    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout, proAppointment, plans };
   }, [stamp, { email: process.env.ADMIN_EMAIL ?? "", password: process.env.ADMIN_PASSWORD ?? "" }]);
   await ctx.close();
   return out;
@@ -234,9 +254,12 @@ try {
     ...(acc.appointment ? [`/citas/${acc.appointment}`] : []),
     ...(acc.virtual ? [`/citas/${acc.virtual}`] : []),
     ...(acc.checkout?.startsWith("/") ? [acc.checkout] : []),
-    ...(acc.transferCheckout ? [acc.transferCheckout] : []),
+    ...acc.plans.map((id) => `/seguimientos/${id}`),
   ]);
-  await run("profesional", login(acc.pro, "contrasena-prueba-123"), [...PRO, ...(acc.proAppointment ? [`/panel/citas/${acc.proAppointment}`] : [])]);
+  await run("profesional", login(acc.pro, "contrasena-prueba-123"), [
+    ...PRO,
+    ...(acc.proAppointment ? [`/panel/citas/${acc.proAppointment}`, `/panel/subsecuentes?cita=${acc.proAppointment}`] : []),
+  ]);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) await run("propietario", login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD), ["/maestro", "/admin"]);
 } finally {
   await browser.close();

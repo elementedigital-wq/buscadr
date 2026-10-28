@@ -4,12 +4,12 @@
  * se devuelven: el CMS solo ve «configurada ••••1234» y su origen (CMS o Cloudflare).
  */
 import { Hono } from "hono";
-import type { AppBindings } from "../env";
-import { GATEWAY_MAP, adminView, getGateways, isGatewayId } from "../lib/gateways";
+import type { AppBindings, Env } from "../env";
+import { CARD_ONLY_REASON, GATEWAY_MAP, adminView, getGateways, isGatewayId } from "../lib/gateways";
 import { isAdmin, readJson } from "../lib/guards";
 import { clean, fail } from "../lib/http";
-import { feeBps } from "../lib/pricing";
 import { decryptJson, encryptJson, secretsKeyConfigured } from "../lib/secrets";
+import { getPayoutSettings, savePayoutSettings } from "../lib/settings";
 
 export const cmsPayments = new Hono<AppBindings>();
 
@@ -21,7 +21,25 @@ cmsPayments.use("*", async (c, next) => {
 const audit = (db: D1Database, actor: string, action: string, details: Record<string, unknown>) =>
   db.prepare("INSERT INTO cms_audit(actor_id,action,details) VALUES(?,?,?)").bind(actor, action, JSON.stringify(details));
 
-cmsPayments.get("/", async (c) => c.json({ ...(await adminView(c.env)), fee_bps: feeBps(c.env) }));
+/** Vista del CMS: medios, ajustes de comisión y liquidación. */
+const view = async (env: Env) => {
+  const [v, settings] = await Promise.all([adminView(env), getPayoutSettings(env)]);
+  return { ...v, settings, fee_bps: settings.fee_bps };
+};
+
+cmsPayments.get("/", async (c) => c.json(await view(c.env)));
+
+/** Comisión de buscaDR, días de retención y monto mínimo de liquidación (ADR 0016). */
+cmsPayments.put("/settings", async (c) => {
+  const b = await readJson<{ fee_bps?: unknown; release_days?: unknown; min_payout_cents?: unknown }>(c);
+  const user = c.get("user")!;
+  const { error } = await savePayoutSettings(c.env, user.id, b);
+  if (error === "fee_bps") fail(400, "La comisión va de 0 % a 30 %.");
+  if (error === "release_days") fail(400, "Los días de retención van de 0 a 30.");
+  if (error === "min_payout_cents") fail(400, "El monto mínimo va de $0 a $1.000.");
+  await audit(c.env.DB, user.id, "payout_settings", { fee_bps: b.fee_bps, release_days: b.release_days, min_payout_cents: b.min_payout_cents }).run();
+  return c.json({ ...(await view(c.env)), message: "Ajustes de cobro guardados." });
+});
 
 cmsPayments.put("/:id", async (c) => {
   const id = c.req.param("id");
@@ -37,6 +55,7 @@ cmsPayments.put("/:id", async (c) => {
     secrets?: Record<string, string | null>;
     confirm_live?: boolean;
   }>(c);
+  if (b.enabled === true && !def.card) fail(409, CARD_ONLY_REASON, "CARD_ONLY");
   const row = await db
     .prepare("SELECT * FROM payment_gateways WHERE id=?")
     .bind(id)
@@ -91,6 +110,10 @@ cmsPayments.put("/:id", async (c) => {
 
   // Activar: solo con datos completos; las que mueven dinero real piden confirmación expresa.
   if (enabled !== !!row?.enabled) {
+    if (!enabled && def.card) {
+      const others = (await getGateways(c.env)).filter((g) => g.card && g.active && g.id !== id);
+      if (!others.length) fail(409, "Debe quedar al menos un medio con tarjeta activo: sin él nadie podría reservar ni pagar su plan.", "LAST_CARD_GATEWAY");
+    }
     if (enabled) {
       const g = (await getGateways(c.env)).find((x) => x.id === id)!;
       if (g.missing.length) fail(400, `Para activar ${def.name} completa: ${g.missing.join(", ")}.`, "GATEWAY_INCOMPLETE");
@@ -104,7 +127,7 @@ cmsPayments.put("/:id", async (c) => {
   }
   // La auditoría registra qué cambió, nunca los valores de las credenciales.
   await audit(db, user.id, "payment_gateway", { id, enabled, fields: Object.keys(b.settings ?? {}), secrets: changedSecrets }).run();
-  return c.json({ ...(await adminView(c.env)), fee_bps: feeBps(c.env), message: "Medio de pago guardado." });
+  return c.json({ ...(await view(c.env)), message: "Medio de pago guardado." });
 });
 
 /** Orden en que el paciente ve los medios (el primero activo es el predeterminado). */
@@ -116,5 +139,5 @@ cmsPayments.post("/order", async (c) => {
     ids.map((id, i) => db.prepare("INSERT INTO payment_gateways(id,sort) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET sort=excluded.sort").bind(id, i)),
   );
   await audit(db, c.get("user")!.id, "payment_gateway_order", { ids }).run();
-  return c.json({ ...(await adminView(c.env)), fee_bps: feeBps(c.env) });
+  return c.json(await view(c.env));
 });

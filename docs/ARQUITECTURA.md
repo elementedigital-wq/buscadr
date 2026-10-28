@@ -32,14 +32,16 @@ Cron */30 → vence retenciones y pagos, planes, recordatorios 24 h / 1 h, limpi
 | `server/lib/gateways.ts` · `secrets.ts` · `server/cms/payments.ts` | Pasarelas configurables desde el CMS (orden, textos, cuenta bancaria) y credenciales cifradas con AES-GCM (ADR 0013) |
 | `server/lib/taxonomy-data.ts` · `taxonomy.ts` | 83 especialidades base en 11 categorías + las propias del CMS, cacheadas por versión publicada (ADR 0014) |
 | `server/routes/trace.ts` · `server/lib/trace.ts` · `qr.ts` | Trazabilidad por etapas con QR de cita y de recepción, satisfacción por etapa y métricas de calidad anónimas (ADR 0015) |
+| `server/lib/payouts.ts` · `settings.ts` · `server/routes/payouts.ts` | Cobro solo con tarjeta, comisión editable y liquidación al profesional con cuenta bancaria cifrada (ADR 0016) |
+| `server/lib/followups.ts` · `server/routes/followups.ts` | Citas subsecuentes: series propuestas por el profesional, aceptadas y pagadas por sesión (ADR 0017) |
 | `server/lib/notify.ts` · `whatsapp.ts` · `mail.ts` | Notificaciones multicanal con consentimiento |
 | `server/lib/practitioners.ts` | Vista pública (coordenadas aproximadas, registro enmascarado, sin dirección) y reputación |
 
 ## Páginas
 
 - **Públicas:** `/` (portada), `/buscar` (lista y mapa), `/especialidades` (por categoría, con búsqueda), `/doctor/:slug` (perfil + calendario de reserva), `/medicos/:ciudad/:especialidad` (landing SEO), `/para-profesionales`, `/planes`, `/como-funciona`, `/privacidad`.
-- **Paciente:** `/citas`, `/citas/:id` (estado, trazabilidad con QR y calificación por etapa, reprogramar, cancelar, chat, video, pago, opinión), `/q/:código` (resultado de escanear un QR), `/pagar/:id`, `/favoritos`, `/notificaciones`, `/cuenta`.
-- **Profesional** (`/panel`, dashboard personalizado para médicos, especialistas, clínicas y servicios): resumen con KPIs y solicitudes, agenda semanal, detalle de cita, horarios y bloqueos, perfil y tarifas, ingresos, plan, escanear QR y calidad (satisfacción por etapa, tiempos y QR de recepción).
+- **Paciente:** `/citas`, `/citas/:id` (estado, trazabilidad con QR y calificación por etapa, reprogramar, cancelar, chat, video, pago, opinión), `/q/:código` (resultado de escanear un QR), `/seguimientos/:id` (serie de citas subsecuentes), `/pagar/:id`, `/favoritos`, `/notificaciones`, `/cuenta`.
+- **Profesional** (`/panel`, dashboard personalizado para médicos, especialistas, clínicas y servicios): resumen con KPIs y solicitudes, agenda semanal, detalle de cita, horarios y bloqueos, perfil y tarifas, subsecuentes, ingresos y liquidaciones (cuenta bancaria), plan, escanear QR y calidad (satisfacción por etapa, tiempos y QR de recepción).
 - **Propietario:** `/admin` y `/maestro` (solo `elemente.digital@gmail.com`).
 
 ## Seguridad y privacidad

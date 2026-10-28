@@ -10,6 +10,10 @@
  *   el pago al ver el comprobante.
  * - `consultorio`: el paciente paga al profesional el día de la cita (sin comisión).
  *
+ * Política de cobro (ADR 0016): buscaDR cobra SOLO con tarjeta de crédito o débito (`card: true`) y
+ * liquida al profesional su parte. Transferencia y pago en el consultorio quedan desactivados (se
+ * conservan para leer los cobros anteriores).
+ *
  * En la tabla `payments`, `provider` es la clase de cobro (CHECK heredado: sandbox | payphone |
  * consultorio = fuera de una pasarela) y `gateway` el medio concreto.
  */
@@ -28,6 +32,8 @@ export type GatewayDef = {
   provider: Provider;
   /** Mueve dinero real (pide confirmación al activarla). */
   live: boolean;
+  /** Cobra con tarjeta de crédito o débito (los únicos medios permitidos, ADR 0016). */
+  card: boolean;
   defaultTitle: string;
   defaultDescription: string;
   logo: string;
@@ -42,6 +48,7 @@ export const GATEWAY_DEFS: GatewayDef[] = [
     kind: "online",
     provider: "sandbox",
     live: false,
+    card: true,
     defaultTitle: "Tarjeta de crédito o débito (prueba)",
     defaultDescription: "Pago de prueba: no se cobra dinero real. Tarjeta 4111 1111 1111 1111.",
     logo: "credit-card",
@@ -54,6 +61,7 @@ export const GATEWAY_DEFS: GatewayDef[] = [
     kind: "online",
     provider: "payphone",
     live: true,
+    card: true,
     defaultTitle: "Tarjeta de crédito o débito",
     defaultDescription: "Pago seguro con Payphone: Visa, Mastercard, Diners Club, Discover o la app Payphone.",
     logo: "lock",
@@ -69,6 +77,7 @@ export const GATEWAY_DEFS: GatewayDef[] = [
     kind: "manual",
     provider: "consultorio",
     live: true,
+    card: false,
     defaultTitle: "Transferencia o depósito bancario",
     defaultDescription: "Transfiere a la cuenta de buscaDR y registra tu comprobante. Confirmamos tu pago y te avisamos.",
     logo: "building",
@@ -89,6 +98,7 @@ export const GATEWAY_DEFS: GatewayDef[] = [
     kind: "offline",
     provider: "consultorio",
     live: false,
+    card: false,
     defaultTitle: "En el consultorio",
     defaultDescription: "Pagas directamente al profesional el día de tu cita.",
     logo: "clinic",
@@ -97,6 +107,9 @@ export const GATEWAY_DEFS: GatewayDef[] = [
   },
 ];
 export const GATEWAY_MAP = new Map(GATEWAY_DEFS.map((g) => [g.id, g]));
+/** Motivo por el que un medio no puede activarse con la política vigente. */
+export const CARD_ONLY_REASON = "buscaDR cobra solo con tarjeta de crédito o débito y liquida al profesional su parte.";
+
 export const isGatewayId = (x: unknown): x is GatewayId => typeof x === "string" && GATEWAY_MAP.has(x as GatewayId);
 
 /** Pasarelas que se mostrarán como «Próximamente» (sin adaptador todavía: no se pueden activar). */
@@ -119,6 +132,8 @@ export type Gateway = GatewayDef & {
   settings: Record<string, string>;
   /** Por qué no puede activarse aún («Faltan las credenciales»…). */
   missing: string[];
+  /** Desactivado por la política de cobro solo con tarjeta. */
+  blocked: string;
   updated_at: string | null;
 };
 
@@ -158,8 +173,8 @@ export async function getGateways(env: Env): Promise<Gateway[]> {
   const out: Gateway[] = [];
   for (const def of GATEWAY_DEFS) {
     const r = list.find((x) => x.id === def.id);
-    // Sin la tabla (migración aún no aplicada): prueba y consultorio activos, como antes.
-    const enabled = r ? !!r.enabled : def.id === "sandbox" || def.id === "consultorio";
+    // Solo tarjeta: sin la tabla (migración aún no aplicada) queda activo el modo de prueba.
+    const enabled = def.card && (r ? !!r.enabled : def.id === "sandbox");
     const settings = parse(r?.settings_json);
     const secrets = def.secrets.length ? await gatewaySecrets(env, def.id, r ?? null) : {};
     const missing = [
@@ -175,17 +190,18 @@ export async function getGateways(env: Env): Promise<Gateway[]> {
       description: r?.description || def.defaultDescription,
       settings,
       missing,
+      blocked: def.card ? "" : CARD_ONLY_REASON,
       updated_at: r?.updated_at ?? null,
     });
   }
   return out.sort((a, b) => a.sort - b.sort);
 }
 
-/** Medios para pagar en línea al reservar (orden del CMS) y si se acepta el pago en el consultorio. */
+/** Medios con tarjeta activos para pagar al reservar (orden del CMS). Nunca en el consultorio (ADR 0016). */
 export async function paymentOptions(env: Env) {
   const all = await getGateways(env);
-  const online = all.filter((g) => g.active && g.kind !== "offline");
-  return { all, online, office: all.some((g) => g.id === "consultorio" && g.active) };
+  const online = all.filter((g) => g.active && g.card);
+  return { all, online, office: false };
 }
 
 /** Vista para el CMS: sin credenciales, solo «configurada ••••1234» y su origen. */
@@ -201,6 +217,8 @@ export async function adminView(env: Env) {
         name: g.name,
         kind: g.kind,
         live: g.live,
+        card: g.card,
+        blocked: g.blocked,
         logo: g.logo,
         enabled: g.enabled,
         active: g.active,

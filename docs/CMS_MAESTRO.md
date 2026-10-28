@@ -85,9 +85,11 @@ El navegador las reduce y comprime a WebP antes de subirlas (logo 800 px, ícono
 
 1. **Tarjeta de prueba** (activa por defecto): no cobra dinero real.
 2. **Payphone:** «Gestionar» → pega el **Token** y el **Store ID** de tu cuenta de Payphone → Guardar → activa el interruptor y confirma el Go/No-Go. Para guardar credenciales desde el CMS necesitas el secreto `BUSCADR_SECRETS_KEY` en Cloudflare (una sola vez); quedan cifradas y solo verás «••••1234». Verifica los endpoints con la documentación vigente de Payphone antes de cobrar.
-3. **Transferencia bancaria:** «Gestionar» → banco, tipo y número de cuenta, titular, RUC → Guardar → activar. El paciente ve los datos con botones de copiar y la referencia `BDR-XXXXXXXX`, registra su comprobante y tú confirmas en **Administración → Transacciones → Confirmar** cuando veas el dinero (o «Rechazar» con un motivo).
-4. **Pago en el consultorio:** si lo desactivas, todas las citas con tarifa se pagan en línea.
-5. El orden (flechas) define el medio predeterminado en el checkout. Los cambios se aplican al instante y quedan en el historial de actividad (sin los valores de las credenciales).
+3. **Transferencia bancaria y pago en el consultorio:** no permitidos (buscaDR cobra solo con tarjeta, ADR 0016). Las transferencias anteriores se siguen confirmando en Administración → Transacciones.
+4. Debe quedar al menos un medio con tarjeta activo.
+5. **Comisión y liquidaciones** (misma pestaña): comisión de buscaDR (%), días de retención tras la cita y liquidación mínima. Aplican a reservas nuevas.
+6. **Liquidar a los profesionales:** Administración → Liquidaciones → «Generar liquidaciones» → «Archivo de transferencias» (CSV para la banca) → transfiere → «Registrar transferencia» con el número de comprobante (el profesional recibe el aviso).
+7. El orden (flechas) define el medio predeterminado en el checkout. Los cambios se aplican al instante y quedan en el historial de actividad (sin los valores de las credenciales).
 
 ## Especialidades y categorías
 

@@ -113,6 +113,19 @@ const STATUS_TONE: Record<string, string> = {
   draft: "bg-gris-claro text-tinta",
   paused: "bg-gris-claro text-gris",
   rejected: "bg-alerta/10 text-alerta-ink",
+  // Liquidaciones (ADR 0016)
+  retenido: "bg-gris-claro text-tinta",
+  disponible: "bg-menta text-verde-ink",
+  liquidando: "bg-amarillo/20 text-tinta",
+  pagada: "bg-menta text-verde-ink",
+  anulado: "bg-gris-claro text-gris",
+  anulada: "bg-gris-claro text-gris",
+  // Citas subsecuentes (ADR 0017)
+  propuesta: "bg-amarillo/20 text-tinta",
+  activa: "bg-celeste text-azul-ink",
+  finalizada: "bg-menta text-verde-ink",
+  vencida: "bg-gris-claro text-gris",
+  conflicto: "bg-alerta/10 text-alerta-ink",
 };
 
 export const PROFILE_STATUS: Record<string, string> = {

@@ -196,7 +196,6 @@ export default function Doctor({ loaderData }: Route.ComponentProps) {
                     <p className="font-semibold">Consulta presencial</p>
                     <p className="text-sm muted">
                       {p.price_in_person_cents ? money(p.price_in_person_cents) : "Consultar"} · {p.slot_minutes} min
-                      {p.prepay_in_person ? " · pago previo" : ""}
                     </p>
                   </div>
                 </div>
@@ -210,7 +209,6 @@ export default function Doctor({ loaderData }: Route.ComponentProps) {
                     <p className="font-semibold">Consulta virtual</p>
                     <p className="text-sm muted">
                       {p.price_virtual_cents ? money(p.price_virtual_cents) : "Consultar"} · {p.slot_minutes} min · videollamada
-                      {p.prepay_virtual ? " · pago previo" : ""}
                     </p>
                   </div>
                 </div>

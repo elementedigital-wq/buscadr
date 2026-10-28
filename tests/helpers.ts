@@ -130,3 +130,16 @@ export function local(daysFromNow: number, hour = 9) {
 }
 
 export const key = () => crypto.randomUUID().replace(/-/g, "");
+
+/** Tarjeta de prueba aprobada del modo sandbox. */
+export const CARD = { number: "4111 1111 1111 1111", exp: "12/30", cvv: "123", name: "Paciente Prueba" };
+
+/** Reserva y paga con la tarjeta de prueba (buscaDR cobra solo con tarjeta, ADR 0016). */
+export async function bookPaid(patient: { browser: Browser }, body: Record<string, unknown>) {
+  const res = await patient.browser.post("/api/appointments", { idempotency_key: key(), ...body });
+  if (res.status !== 201) throw new Error(`book ${res.status} ${JSON.stringify(res.data)}`);
+  const payId = String(res.data.checkout).split("/").pop() as string;
+  const paid = await patient.browser.post(`/api/payments/${payId}/sandbox`, CARD);
+  if (paid.data.status !== "aprobado") throw new Error(`pay ${paid.status} ${JSON.stringify(paid.data)}`);
+  return { id: res.data.id as number, payId, created: res.data };
+}

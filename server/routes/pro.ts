@@ -5,7 +5,7 @@
  */
 import { Hono } from "hono";
 import type { AppBindings, User } from "../env";
-import { type AppointmentStatus, PAYMENT_LABEL, type PaymentStatus, STATUS_LABEL } from "../lib/appointments";
+import { type AppointmentStatus, STATUS_LABEL, paymentLabel } from "../lib/appointments";
 import { CITIES, KINDS, PLAN_MAP, TITLES, cityByName, slugify } from "../lib/catalog";
 import { type Taxonomy, getTaxonomy } from "../lib/taxonomy";
 import { track } from "../lib/events";
@@ -14,7 +14,7 @@ import { clean, fail, isCents } from "../lib/http";
 import { storeUserImage } from "../lib/media";
 import { PAYMENT_STATUS_LABEL, type PaymentRow, collectedOnline, createPayment, startCheckout } from "../lib/payments";
 import { type PractitionerRow, fullName, patientShortName, publicPractitioner, reputationFor } from "../lib/practitioners";
-import { feeBps } from "../lib/pricing";
+import { getPayoutSettings } from "../lib/settings";
 import { RULES, hit } from "../lib/rate-limit";
 import { validateRules } from "../lib/slots";
 import { DAY, addDays, isDate, localDate, localMidnight, parseLocal } from "../lib/time";
@@ -24,7 +24,7 @@ export const pro = new Hono<AppBindings>();
 
 const mine = (db: D1Database, user: User) => db.prepare("SELECT * FROM practitioners WHERE user_id=?").bind(user.id).first<PractitionerRow>();
 
-async function requirePractitioner(db: D1Database, user: User) {
+export async function requirePractitioner(db: D1Database, user: User) {
   const p = await mine(db, user);
   if (!p) fail(404, "Aún no tienes un perfil profesional. Créalo para activar tu agenda.", "NO_PROFILE");
   return p;
@@ -398,7 +398,7 @@ pro.get("/calendar", async (c) => {
       ...a,
       patient_name: patientShortName(a.patient_name),
       status_label: STATUS_LABEL[a.status as AppointmentStatus],
-      payment_label: PAYMENT_LABEL[a.payment_status as PaymentStatus],
+      payment_label: paymentLabel(a),
     })),
     blocks: blocks.results,
     rules: rules.results,
@@ -554,7 +554,7 @@ pro.get("/income", async (c) => {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="ingresos-buscadr-${month}.csv"` },
     });
   }
-  return c.json({ month, items: rows, totals, fee_bps: feeBps(c.env) });
+  return c.json({ month, items: rows, totals, fee_bps: (await getPayoutSettings(c.env)).fee_bps });
 });
 
 /* ------------------------------------------------------------------ Plan SaaS */

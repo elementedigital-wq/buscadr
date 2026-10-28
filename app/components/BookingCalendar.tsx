@@ -41,24 +41,15 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
   const [days, setDays] = useState<Day[] | null>(null);
   const [date, setDate] = useState<string | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
-  const [payOnline, setPayOnline] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const key = useRef(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`);
 
   const price = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
-  const prepay = modality === "virtual" ? p.prepay_virtual : p.prepay_in_person;
-  // Medios activos en el CMS (mismas reglas que el servidor): sin medios en línea se paga en el
-  // consultorio; sin pago en consultorio, en línea.
-  const gateways = root?.catalog.gateways ?? [];
-  const onlineMethods = gateways.filter((g) => g.kind !== "offline");
-  const onlineOk = onlineMethods.length > 0;
-  const officeOk = gateways.some((g) => g.id === "consultorio");
-  const mustOnline = price > 0 && onlineOk && (prepay || !officeOk);
-  const canChoose = price > 0 && onlineOk && officeOk && !prepay;
-  const online = price > 0 && (mustOnline || (canChoose && payOnline));
-  const onlineHint = onlineMethods.map((g) => g.title).join(" · ") || "buscaDR Pay";
+  // Solo tarjeta (ADR 0016): toda cita con tarifa se paga con tarjeta de crédito o débito al reservar.
+  const cardOk = (root?.catalog.gateways ?? []).length > 0 || p.demo;
+  const online = price > 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -105,7 +96,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
     setError(null);
     try {
       const res = await api<{ id: number; checkout: string | null }>("/api/appointments", {
-        body: { practitioner_id: p.id, start: slot, modality, payment_mode: online ? "en_linea" : "consultorio", reason, idempotency_key: key.current },
+        body: { practitioner_id: p.id, start: slot, modality, reason, idempotency_key: key.current },
       });
       if (res.checkout) {
         if (/^https?:/.test(res.checkout)) window.location.assign(res.checkout);
@@ -229,50 +220,19 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
         )}
       </div>
 
-      {canChoose && (
-        <fieldset className="mt-2">
-          <legend className="text-sm font-semibold">¿Cómo quieres pagar?</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {[
-              [false, "En el consultorio", "Pagas el día de la cita"],
-              [true, "En línea ahora", onlineHint],
-            ].map(([v, title, hint]) => (
-              <label
-                key={String(v)}
-                className={`flex min-w-0 cursor-pointer items-start gap-3 rounded-2xl p-3 ring-1 ${payOnline === v ? "bg-white ring-2 ring-azul" : "bg-white ring-tinta/10"}`}
-              >
-                <input
-                  type="radio"
-                  name="pago"
-                  className="mt-1 accent-[var(--color-azul)]"
-                  checked={payOnline === v}
-                  onChange={() => setPayOnline(v as boolean)}
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold">{title as string}</span>
-                  <span className="block text-xs muted">{hint as string}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-      )}
-      {mustOnline && (
+      {online && (
         <p className="mt-2 flex items-start gap-2 rounded-2xl bg-celeste/60 p-3 text-xs">
-          <Icon name="card" className="mt-0.5 size-4 text-azul" />
+          <Icon name="card" className="mt-0.5 size-4 shrink-0 text-azul-ink" />
           <span>
-            {prepay
-              ? `Las citas ${modality === "virtual" ? "virtuales" : "presenciales"} de este profesional se pagan en línea al reservar.`
-              : "La cita se paga en línea al reservar."}{" "}
-            Medios: {onlineHint}. Si el profesional no la confirma, te devolvemos el dinero.
+            Pagas {money(price)} con <strong>tarjeta de crédito o débito</strong> al reservar, en el pago seguro de buscaDR. Si el profesional no confirma tu
+            cita, te devolvemos el dinero.
           </span>
         </p>
       )}
-      {price > 0 && !onlineOk && (
-        <p className="mt-2 flex items-start gap-2 rounded-2xl bg-fondo p-3 text-xs">
-          <Icon name="clinic" className="mt-0.5 size-4 text-azul" />
-          Pagas {money(price)} directamente en el consultorio el día de la cita.
-        </p>
+      {online && !cardOk && (
+        <div className="mt-2">
+          <Notice tone="danger">Los pagos con tarjeta no están disponibles en este momento. Inténtalo más tarde.</Notice>
+        </div>
       )}
 
       <label className="field mt-4">
@@ -301,16 +261,16 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
               </p>
               <p className="text-white/80">
                 {modality === "virtual" ? "Virtual" : "Presencial"} · {price ? money(price) : "Tarifa por confirmar"}
-                {online ? " · pago en línea" : ""}
+                {online ? " · pago con tarjeta" : ""}
               </p>
             </>
           ) : (
             <p className="text-white/85">Elige un horario disponible</p>
           )}
         </div>
-        <button type="button" onClick={book} disabled={!slot || busy} className="btn min-h-12 bg-white text-tinta hover:bg-celeste">
+        <button type="button" onClick={book} disabled={!slot || busy || (online && !cardOk)} className="btn min-h-12 bg-white text-tinta hover:bg-celeste">
           {busy ? <Spinner label="Reservando" /> : <Icon name="calendar-check" className="size-4" />}
-          {online ? "Continuar al pago" : bookLabel}
+          {online ? "Pagar con tarjeta" : bookLabel}
         </button>
       </div>
       <p className="mt-3 text-xs muted">

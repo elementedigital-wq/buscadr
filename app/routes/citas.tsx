@@ -4,6 +4,7 @@ import { specialtyName } from "../components/Specialties";
 import { Avatar, DateTicket, DemoBadge, EmptyState, PageHeader, StatusBadge } from "../components/ui";
 import { serverApiSafe } from "../lib/api.server";
 import { money, whenLabel } from "../lib/format";
+import { type FollowupPlan, frequencyLabel } from "../lib/followups";
 import type { AppointmentSummary } from "../lib/types";
 import { useRootData } from "../root";
 import type { Route } from "./+types/citas";
@@ -14,9 +15,12 @@ export async function loader({ request, context }: Route.LoaderArgs) {
   const me = await serverApiSafe<{ user: unknown }>(context, request, "/api/auth/me", { user: null });
   if (!me.user) throw redirect("/cuenta?next=/citas");
   const scope = new URL(request.url).searchParams.get("ver") === "historial" ? "past" : "upcoming";
-  const data = await serverApiSafe<{ items: AppointmentSummary[] }>(context, request, `/api/appointments?scope=${scope}`, { items: [] });
+  const [data, series] = await Promise.all([
+    serverApiSafe<{ items: AppointmentSummary[] }>(context, request, `/api/appointments?scope=${scope}`, { items: [] }),
+    serverApiSafe<{ plans: FollowupPlan[] }>(context, request, "/api/followups", { plans: [] }),
+  ]);
   const now = Date.now();
-  return { scope, items: data.items.map((a) => ({ ...a, when: whenLabel(a.start_ms, now) })) };
+  return { scope, items: data.items.map((a) => ({ ...a, when: whenLabel(a.start_ms, now) })), plans: series.plans };
 }
 
 export default function Citas({ loaderData }: Route.ComponentProps) {
@@ -34,6 +38,32 @@ export default function Citas({ loaderData }: Route.ComponentProps) {
           </Link>
         }
       />
+      {loaderData.plans.length > 0 && (
+        <section className="mb-5 grid gap-3" aria-label="Citas de seguimiento">
+          {loaderData.plans.map((p) => (
+            <Link
+              key={p.id}
+              to={`/seguimientos/${p.id}`}
+              className={`card flex min-w-0 items-center gap-3 p-4 transition hover:ring-azul/30 ${p.status === "propuesta" ? "ring-2 ring-azul/40" : ""}`}
+            >
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl tone-azul" aria-hidden>
+                <Icon name="repeat" className="size-5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-bold break-words">
+                  {p.status === "propuesta" ? "Nueva propuesta: " : ""}
+                  {p.title}
+                </span>
+                <span className="block text-sm muted">
+                  {p.practitioner.name} · {p.summary.total} citas · {frequencyLabel(p.interval_days).toLowerCase()}
+                  {p.summary.unpaid ? ` · ${p.summary.unpaid} por pagar` : ""}
+                </span>
+              </span>
+              <StatusBadge status={p.status} label={p.status === "propuesta" ? "Responder" : p.status_label} />
+            </Link>
+          ))}
+        </section>
+      )}
       <div className="mb-4 flex gap-2" role="tablist" aria-label="Citas">
         <Link to="/citas" role="tab" aria-selected={!past} aria-current={!past ? "true" : undefined} className="pill">
           Próximas
@@ -62,6 +92,7 @@ export default function Citas({ loaderData }: Route.ComponentProps) {
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <StatusBadge status={a.status} label={a.status_label} />
                     {a.payment_status === "pendiente" && <StatusBadge status="pendiente" label="Pago pendiente" />}
+                    {a.followup && <StatusBadge status="activa" label={`Seguimiento ${a.followup.seq}/${a.followup.total}`} />}
                     {a.demo && <DemoBadge />}
                   </div>
                 </div>

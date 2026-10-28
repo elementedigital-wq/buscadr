@@ -43,6 +43,9 @@ export type PractitionerRow = {
   plan_until_ms: number | null;
   demo: number;
   views: number;
+  /** Cuenta para liquidaciones: cifrada y su resumen enmascarado (ADR 0016). Nunca en la vista pública. */
+  payout_account_enc: string;
+  payout_account_hint: string;
   created_at: string;
   updated_at: string;
 };

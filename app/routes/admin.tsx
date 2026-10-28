@@ -39,6 +39,7 @@ const TABS = [
   ["kpis", "KPIs", "chart"],
   ["verificacion", "Verificación", "verified"],
   ["pagos", "Transacciones", "wallet"],
+  ["liquidaciones", "Liquidaciones", "receipt"],
   ["citas", "Citas", "calendar"],
   ["opiniones", "Opiniones", "star"],
 ] as const;
@@ -58,7 +59,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
       >
         Indicadores del Documento Maestro, verificación de profesionales, libro de transacciones y moderación.
       </PageHeader>
-      <div role="tablist" aria-label="Secciones" className="scroll-row mb-6 rounded-full bg-white p-1 ring-1 ring-tinta/10 sm:inline-flex">
+      <div role="tablist" aria-label="Secciones" className="scroll-row mb-6 max-w-full rounded-full bg-white p-1 ring-1 ring-tinta/10 xl:inline-flex">
         {TABS.map(([key, label, icon]) => (
           <button
             key={key}
@@ -75,6 +76,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
       {tab === "kpis" && (loaderData.kpis ? <KpiView k={loaderData.kpis} /> : <Notice tone="danger">No se pudieron cargar los KPIs.</Notice>)}
       {tab === "verificacion" && <Verification />}
       {tab === "pagos" && <Payments />}
+      {tab === "liquidaciones" && <Payouts />}
       {tab === "citas" && <Appointments />}
       {tab === "opiniones" && <Reviews />}
     </div>
@@ -123,7 +125,12 @@ function KpiView({ k }: { k: Kpis }) {
       </section>
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Indicadores secundarios">
         <Stat icon="verified" label="Profesionales verificados" value={verified} hint={`${pending} en revisión`} tone="verde" />
-        <Stat icon="card" label="Pagos aprobados" value={money(k.payments.gross)} hint={`${k.payments.n} pagos · ${money(k.payments.office)} en consultorio`} />
+        <Stat
+          icon="card"
+          label="Pagos aprobados"
+          value={money(k.payments.gross)}
+          hint={`${k.payments.n} pagos con tarjeta · comisión ${money(k.payments.fees)}`}
+        />
         <Stat
           icon="whatsapp"
           label="Avisos entregados (30 d)"
@@ -601,5 +608,191 @@ function Reviews() {
         </li>
       ))}
     </ul>
+  );
+}
+
+type Balance = { retained: number; available: number; releasing: number; in_payout: number; paid: number };
+type PayoutsData = {
+  settings: { fee_bps: number; release_days: number; min_payout_cents: number };
+  totals: Balance;
+  practitioners: { id: number; name: string; city: string; account_hint: string; has_account: boolean; real: Balance; test: Balance }[];
+  payouts: {
+    id: number;
+    practitioner_id: number;
+    name: string;
+    amount_cents: number;
+    lines: number;
+    status: string;
+    status_label: string;
+    test: number;
+    account_hint: string;
+    reference: string;
+    created_at: string;
+    paid_at: string | null;
+  }[];
+};
+
+/** Liquidaciones a profesionales (ADR 0016): saldos, generar, exportar, registrar transferencia. */
+function Payouts() {
+  const [data, setData] = useState<PayoutsData | null>(null);
+  const [msg, setMsg] = useState<{ tone: "info" | "danger" | "success"; text: string } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const load = useCallback(() => {
+    api<PayoutsData>("/api/admin/payouts")
+      .then(setData)
+      .catch((e) => setMsg({ tone: "danger", text: (e as Error).message }));
+  }, []);
+  useEffect(load, [load]);
+
+  async function run(key: string, fn: () => Promise<string>) {
+    setBusy(key);
+    setMsg(null);
+    try {
+      setMsg({ tone: "success", text: await fn() });
+      load();
+    } catch (e) {
+      setMsg({ tone: "danger", text: (e as Error).message });
+    } finally {
+      setBusy(null);
+    }
+  }
+  const generate = (practitioner_id?: number, test = false) =>
+    run(`gen-${practitioner_id ?? "all"}-${test}`, async () => {
+      const r = await api<{ created: number; results: { skipped?: string }[] }>("/api/admin/payouts", { body: { practitioner_id, test } });
+      const skipped = r.results.filter((x) => x.skipped).map((x) => x.skipped);
+      return `${r.created} ${r.created === 1 ? "liquidación generada" : "liquidaciones generadas"}.${skipped.length ? ` Omitidas: ${[...new Set(skipped)].join("; ")}.` : ""}`;
+    });
+  const paid = (id: number, test: number) => {
+    const reference = test ? "PRUEBA" : window.prompt("Número de comprobante o referencia de la transferencia:");
+    if (!reference) return;
+    run(`paid-${id}`, async () => {
+      await api(`/api/admin/payouts/${id}/paid`, { body: { reference } });
+      return `Liquidación #${id} registrada como transferida. Avisamos al profesional.`;
+    });
+  };
+  const cancel = (id: number) => {
+    if (!window.confirm("¿Anular esta liquidación? Su saldo vuelve a quedar disponible.")) return;
+    run(`cancel-${id}`, async () => {
+      await api(`/api/admin/payouts/${id}/cancel`, { body: {} });
+      return `Liquidación #${id} anulada.`;
+    });
+  };
+
+  if (!data) return msg ? <Notice tone="danger">{msg.text}</Notice> : <Spinner />;
+  const t = data.totals;
+  const pending = data.payouts.filter((p) => p.status === "pendiente" && !p.test);
+  const withTest = data.practitioners.filter((p) => p.test.available > 0);
+  return (
+    <section className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat icon="wallet" label="Disponible para liquidar" value={money(t.available)} tone="verde" />
+        <Stat icon="clock" label="Por liberar" value={money(t.releasing)} hint={`${data.settings.release_days} días tras la cita`} tone="cielo" />
+        <Stat icon="calendar-check" label="Citas por realizar" value={money(t.retained)} tone="neutro" />
+        <Stat icon="receipt" label="Transferido" value={money(t.paid)} hint={t.in_payout ? `${money(t.in_payout)} por transferir` : undefined} />
+      </div>
+      <p className="text-sm muted">
+        Comisión {pct(data.settings.fee_bps)} · liquidación mínima {money(data.settings.min_payout_cents)} · se configura en CMS → Pasarelas de pago. buscaDR
+        transfiere desde su cuenta a la cuenta registrada de cada profesional y registra aquí la referencia.
+      </p>
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn" disabled={!!busy || t.available <= 0} onClick={() => generate()}>
+          {busy === "gen-all-false" ? <Spinner label="Generando" /> : <Icon name="receipt" className="size-4" />} Generar liquidaciones
+        </button>
+        <a href="/api/admin/payouts/export" className={`btn-outline ${pending.length ? "" : "pointer-events-none opacity-50"}`} aria-disabled={!pending.length}>
+          <Icon name="download" className="size-4" /> Archivo de transferencias ({pending.length})
+        </a>
+        {withTest.length > 0 && (
+          <button type="button" className="btn-outline" disabled={!!busy} onClick={() => generate(undefined, true)}>
+            Liquidar cobros de prueba
+          </button>
+        )}
+      </div>
+
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: tabla con desplazamiento horizontal; WCAG 2.1.1 exige poder desplazarla con el teclado (axe scrollable-region-focusable) */}
+      <div className="card overflow-x-auto" role="region" aria-label="Saldos por profesional" tabIndex={0}>
+        <table className="w-full min-w-[48rem] text-left text-sm">
+          <thead className="border-b border-tinta/5 text-xs uppercase muted">
+            <tr>
+              <th className="p-3">Profesional</th>
+              <th className="p-3">Cuenta</th>
+              <th className="p-3 text-right">Por realizar</th>
+              <th className="p-3 text-right">Por liberar</th>
+              <th className="p-3 text-right">Disponible</th>
+              <th className="p-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-tinta/5">
+            {data.practitioners.map((p) => (
+              <tr key={p.id}>
+                <td className="p-3 font-semibold">
+                  {p.name}
+                  <span className="block text-xs font-normal muted">{p.city}</span>
+                </td>
+                <td className="p-3 text-xs">{p.has_account ? p.account_hint : <span className="text-alerta-ink">Sin cuenta registrada</span>}</td>
+                <td className="p-3 text-right">{money(p.real.retained)}</td>
+                <td className="p-3 text-right">{money(p.real.releasing)}</td>
+                <td className="p-3 text-right font-semibold">
+                  {money(p.real.available)}
+                  {p.test.available ? <span className="block text-xs font-normal muted">+ {money(p.test.available)} prueba</span> : null}
+                </td>
+                <td className="p-3 text-right">
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    disabled={!!busy || p.real.available <= 0 || !p.has_account}
+                    onClick={() => generate(p.id)}
+                  >
+                    Liquidar
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {!data.practitioners.length && (
+              <tr>
+                <td className="p-4 muted" colSpan={6}>
+                  Aún no hay cobros con tarjeta a liquidar.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 className="text-lg font-extrabold">Historial de liquidaciones</h3>
+      {data.payouts.length ? (
+        <ul className="card divide-y divide-tinta/5">
+          {data.payouts.map((p) => (
+            <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <div className="min-w-0">
+                <p className="font-semibold">
+                  #{p.id} · {p.name} · {money(p.amount_cents)}
+                  {p.test ? <span className="ml-2 chip bg-amarillo/20 px-2 py-0.5 text-xs">Prueba</span> : null}
+                </p>
+                <p className="text-xs break-words muted">
+                  {p.lines} {p.lines === 1 ? "cobro" : "cobros"} · {dateTime(p.created_at)} · {p.account_hint}
+                  {p.reference ? ` · Ref. ${p.reference}` : ""}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status={p.status} label={p.status_label} />
+                {p.status === "pendiente" && (
+                  <>
+                    <button type="button" className="btn btn-sm" disabled={!!busy} onClick={() => paid(p.id, p.test)}>
+                      Registrar transferencia
+                    </button>
+                    <button type="button" className="btn-ghost btn-sm" disabled={!!busy} onClick={() => cancel(p.id)}>
+                      Anular
+                    </button>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm muted">Sin liquidaciones todavía.</p>
+      )}
+    </section>
   );
 }

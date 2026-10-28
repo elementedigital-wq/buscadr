@@ -2,7 +2,7 @@
 
 Directorio médico y plataforma de citas para Ecuador: pacientes encuentran médicos, especialistas, clínicas y servicios de salud, comparan tarifas **presenciales y virtuales** y agendan en un calendario que el profesional confirma. Cada profesional tiene su **panel de citas**, avisos por **WhatsApp** y cobros registrados con **buscaDR Pay**. Piloto en Guayaquil, Samborondón, Daule, Quito y Cuenca.
 
-> v1.3 (28-oct-2026): trazabilidad de la atención con QR (reserva, llegada, consulta y cierre) y satisfacción de 1 a 5 por etapa. v1.2: 83 especialidades en 11 categorías (ampliables desde el CMS) y pasarelas de pago configurables al estilo WooCommerce, sobre Cloudflare Workers + D1. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
+> v1.4 (28-oct-2026): cobro solo con tarjeta con liquidación al profesional (comisión editable en el CMS) y panel de citas subsecuentes. v1.3: trazabilidad de la atención con QR (reserva, llegada, consulta y cierre) y satisfacción de 1 a 5 por etapa. v1.2: 83 especialidades en 11 categorías (ampliables desde el CMS) y pasarelas de pago configurables al estilo WooCommerce, sobre Cloudflare Workers + D1. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
 
 ## Qué incluye
 
@@ -13,6 +13,8 @@ Directorio médico y plataforma de citas para Ecuador: pacientes encuentran méd
 | Citas | Reserva atómica sin dobles reservas, retención con vencimiento, confirmación del profesional (panel o **botón de WhatsApp**), recordatorios 24 h y 1 h, sala de video para citas virtuales |
 | buscaDR Pay | Pasarela propia con **libro de transacciones**: checkout en la app (sandbox), adaptador Payphone, cobros en consultorio, reembolsos automáticos, comisión configurable |
 | Trazabilidad y calidad | QR de la cita y QR de recepción para confirmar llegada, consulta y cierre; línea de tiempo con espera y duración; **satisfacción por etapa** (1–5) con resultados anónimos en Panel → Calidad |
+| Cobro y liquidación | Solo tarjeta de crédito o débito; buscaDR cobra, retiene su comisión y transfiere al profesional su parte (Administración → Liquidaciones) |
+| Citas subsecuentes | Series de controles programadas por el profesional, aceptadas por el paciente y pagadas sesión por sesión |
 | Notificaciones | Campana en la app, WhatsApp (Cloud API) y correo (Resend), con consentimiento registrado |
 | Administración | `/admin`: KPIs (citas realizadas, confirmación, ingresos, MRR, demanda no atendida), verificación de profesionales, transacciones con reembolso, citas y opiniones |
 | CMS Maestro | `/maestro` (solo `elemente.digital@gmail.com`): marca, **tipografías** (Google Fonts importadas o enlazadas, o subidas), **íconos Font Awesome** (catálogo + librería completa), portada, banners, textos, componentes, especialidades, profesionales destacados, biblioteca, SEO, permisos, opiniones, historial y **acceso y contraseña** con recuperación por correo |

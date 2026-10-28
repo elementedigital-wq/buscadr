@@ -14,6 +14,7 @@ import { clean, fail } from "../lib/http";
 import { notify, recipient } from "../lib/notify";
 import { ONLINE_SQL, PAYMENT_STATUS_LABEL, type PaymentRow, collectedOnline, gatewayOf, paymentEvent } from "../lib/payments";
 import { refundPayment, settlePayment } from "../lib/settle";
+import { adminPayouts } from "./payouts";
 
 export const admin = new Hono<AppBindings>();
 
@@ -21,6 +22,8 @@ admin.use("*", async (c, next) => {
   requireAdmin(c);
   await next();
 });
+
+admin.route("/payouts", adminPayouts);
 
 /** KPIs del Documento Maestro §2.3. North Star: citas realizadas gestionadas por buscaDR. Excluye perfiles de muestra. */
 admin.get("/kpis", async (c) => {

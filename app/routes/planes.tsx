@@ -11,14 +11,14 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "description",
     content:
-      "Agenda en línea, confirmaciones por WhatsApp, citas virtuales y cobros con buscaDR Pay. Planes desde $0 para médicos, especialistas y clínicas en Ecuador.",
+      "Agenda en línea, confirmaciones por WhatsApp, citas virtuales y cobro con tarjeta con liquidación al profesional. Planes desde $0 para médicos, especialistas y clínicas en Ecuador.",
   },
 ];
 
 const FAQ = [
   ["¿Puedo empezar gratis?", "Sí. El plan Gratis incluye tu ficha pública, opiniones verificadas y hasta 15 citas al mes. Cambias de plan cuando quieras."],
   ["¿Cómo se cobra el plan?", "Con buscaDR Pay, dentro de tu panel. Cada pago queda en tu historial y se renueva por 30 días."],
-  ["¿El paciente paga recargos?", "No. El paciente paga la tarifa que publicas. La comisión por citas pagadas en línea la asume el profesional."],
+  ["¿El paciente paga recargos?", "No. El paciente paga la tarifa que publicas. La comisión de buscaDR se descuenta de lo que se transfiere al profesional."],
   ["¿La verificación cuesta?", "No. La verificación y las opiniones nunca dependen del plan ni se pueden comprar."],
 ];
 
@@ -28,8 +28,8 @@ export default function Planes() {
   return (
     <div className="container-page pt-6 sm:pt-8">
       <PageHeader eyebrow="Para profesionales" title="Planes simples para llenar tu agenda">
-        Software de agenda, avisos por WhatsApp y cobros en línea, en un solo lugar. Comisión de {pct(root?.catalog.fee_bps ?? 800)} solo en citas pagadas en
-        línea.
+        Software de agenda, avisos por WhatsApp y cobro con tarjeta, en un solo lugar. buscaDR cobra cada cita, retiene {pct(root?.catalog.fee_bps ?? 800)} y te
+        transfiere el resto.
       </PageHeader>
       <PlanGrid
         plans={root?.catalog.plans ?? []}

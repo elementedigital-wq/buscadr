@@ -1,11 +1,13 @@
 /**
  * CMS · Pasarelas de pago (ADR 0013): como «WooCommerce → Ajustes → Pagos». Lista ordenable de
  * medios con interruptor, «Gestionar» para título, descripción, datos y credenciales (se envían una
- * sola vez y vuelven enmascaradas), y las pasarelas que llegarán después.
+ * sola vez y vuelven enmascaradas), y las pasarelas que llegarán después. buscaDR cobra solo con tarjeta
+ * (ADR 0016): transferencia y consultorio aparecen bloqueados. Incluye la comisión y las reglas de
+ * liquidación al profesional.
  */
 import { useCallback, useEffect, useState } from "react";
 import { type ApiError, api } from "../../lib/api";
-import { pct } from "../../lib/format";
+import { money, pct } from "../../lib/format";
 import { Icon } from "../Icon";
 import { Notice, Spinner } from "../ui";
 import { Section } from "./fields";
@@ -17,6 +19,9 @@ type Gateway = {
   name: string;
   kind: "online" | "manual" | "offline";
   live: boolean;
+  /** Cobra con tarjeta (ADR 0016: los únicos medios permitidos). */
+  card: boolean;
+  blocked: string;
   logo: string;
   enabled: boolean;
   active: boolean;
@@ -31,7 +36,8 @@ type Gateway = {
   updated_at: string | null;
   secrets: SecretInfo[];
 };
-type Data = { gateways: Gateway[]; coming_soon: { id: string; name: string; note: string }[]; secrets_key: boolean; fee_bps: number };
+type Settings = { fee_bps: number; release_days: number; min_payout_cents: number };
+type Data = { gateways: Gateway[]; coming_soon: { id: string; name: string; note: string }[]; secrets_key: boolean; fee_bps: number; settings: Settings };
 
 const KIND: Record<Gateway["kind"], string> = { online: "En línea al reservar", manual: "En línea · confirmación manual", offline: "Fuera de buscaDR" };
 
@@ -212,17 +218,17 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
   }
 
   if (!data) return <Spinner />;
-  const online = data.gateways.filter((g) => g.active && g.kind !== "offline");
+  const online = data.gateways.filter((g) => g.active && g.card);
   return (
     <div className="space-y-5">
       <Section
         title="Pasarelas de pago"
-        description="Activa, ordena y configura los medios con los que pagan los pacientes (citas en línea) y los profesionales (planes). El primero activo es el predeterminado en el checkout."
+        description="buscaDR cobra solo con tarjeta de crédito o débito y liquida a cada profesional su parte. Activa, ordena y configura los medios con tarjeta; el primero activo es el predeterminado en el checkout."
       >
         {!online.length && (
           <div className="mb-4">
-            <Notice tone="warning" title="Sin medios de pago en línea">
-              Las citas se pagarán en el consultorio y los profesionales no podrán pagar planes hasta activar al menos un medio en línea.
+            <Notice tone="danger" title="Sin medios con tarjeta">
+              Nadie puede reservar citas con tarifa ni pagar planes hasta activar al menos un medio con tarjeta.
             </Notice>
           </div>
         )}
@@ -235,7 +241,7 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
         ) : (
           <div className="mb-4">
             <Notice tone="info" title="Modo de prueba">
-              Solo está activo el pago de prueba: no se cobra dinero real. Activa Payphone o la transferencia bancaria tras el Go/No-Go.
+              Solo está activo el pago con tarjeta de prueba: no se cobra dinero real. Activa Payphone tras el Go/No-Go.
             </Notice>
           </div>
         )}
@@ -249,7 +255,9 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
                 <div className="min-w-0">
                   <p className="flex flex-wrap items-center gap-2 font-semibold">
                     <span className="break-words">{g.name}</span>
-                    {g.active ? (
+                    {g.blocked ? (
+                      <span className="chip bg-gris-claro px-2 py-0.5 text-xs">No permitido</span>
+                    ) : g.active ? (
                       <span className="chip tone-verde px-2 py-0.5 text-xs">Activo</span>
                     ) : g.enabled ? (
                       <span className="chip bg-amarillo/20 px-2 py-0.5 text-xs">Incompleto</span>
@@ -261,7 +269,11 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
                   <p className="text-xs muted">
                     {KIND[g.kind]} · el paciente ve: «{g.title}»
                   </p>
-                  {g.missing.length > 0 && <p className="text-xs text-alerta-ink">Falta: {g.missing.join(", ")}</p>}
+                  {g.blocked ? (
+                    <p className="text-xs muted">{g.blocked}</p>
+                  ) : (
+                    g.missing.length > 0 && <p className="text-xs text-alerta-ink">Falta: {g.missing.join(", ")}</p>
+                  )}
                 </div>
                 <div className="col-span-2 flex flex-wrap items-center gap-1 sm:col-span-1">
                   <button type="button" className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Subir ${g.name}`}>
@@ -281,26 +293,25 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
                     role="switch"
                     aria-checked={g.enabled}
                     aria-label={`${g.name}: ${g.enabled ? "activado" : "desactivado"}`}
-                    disabled={busy === g.id}
+                    disabled={busy === g.id || !!g.blocked}
                     onClick={() => toggle(g)}
                     className={`chip min-h-10 text-xs font-semibold ${g.enabled ? "bg-azul text-white" : "bg-gris-claro text-tinta"}`}
                   >
                     {busy === g.id ? <Spinner label="Guardando" /> : g.enabled ? "Activado" : "Desactivado"}
                   </button>
-                  <button type="button" className="btn-outline btn-sm" aria-expanded={open === g.id} onClick={() => setOpen(open === g.id ? null : g.id)}>
-                    {open === g.id ? "Cerrar" : "Gestionar"}
-                  </button>
+                  {!g.blocked && (
+                    <button type="button" className="btn-outline btn-sm" aria-expanded={open === g.id} onClick={() => setOpen(open === g.id ? null : g.id)}>
+                      {open === g.id ? "Cerrar" : "Gestionar"}
+                    </button>
+                  )}
                 </div>
               </div>
               {open === g.id && <GatewayForm g={g} secretsKey={data.secrets_key} onSaved={setData} notify={notify} />}
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs muted">
-          Comisión de buscaDR en citas cobradas por buscaDR (en línea o transferencia): {pct(data.fee_bps)} (variable <code>BUSCADR_FEE_BPS</code>). El pago en
-          el consultorio no tiene comisión.
-        </p>
       </Section>
+      <PayoutSettings settings={data.settings} onSaved={setData} notify={notify} />
       <Section title="Próximamente" description="Pasarelas que se pueden integrar a buscaDR Pay. Aún no tienen adaptador: no se pueden activar.">
         <ul className="grid gap-3 sm:grid-cols-2">
           {data.coming_soon.map((c) => (
@@ -317,5 +328,62 @@ export function Pagos({ notify }: { notify: (t: string, tone?: "ok" | "error") =
         </ul>
       </Section>
     </div>
+  );
+}
+
+/** Comisión de buscaDR y reglas de liquidación al profesional (ADR 0016). */
+function PayoutSettings({ settings, onSaved, notify }: { settings: Settings; onSaved: (d: Data) => void; notify: (t: string, tone?: "ok" | "error") => void }) {
+  const [fee, setFee] = useState(String(settings.fee_bps / 100));
+  const [days, setDays] = useState(String(settings.release_days));
+  const [min, setMin] = useState(String(settings.min_payout_cents / 100));
+  const [busy, setBusy] = useState(false);
+  const bps = Math.round(Number(fee || 0) * 100);
+  const example = 4000;
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const d = await api<Data & { message: string }>("/api/cms/payments/settings", {
+        method: "PUT",
+        body: { fee_bps: bps, release_days: Number(days), min_payout_cents: Math.round(Number(min || 0) * 100) },
+      });
+      onSaved(d);
+      notify(d.message);
+    } catch (err) {
+      notify((err as ApiError).message, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Section
+      title="Comisión y liquidaciones"
+      description="buscaDR cobra la cita completa con tarjeta, retiene su comisión y transfiere el resto al profesional. Los cambios aplican a las reservas nuevas."
+    >
+      <form className="grid gap-3 sm:grid-cols-3" onSubmit={save}>
+        <label className="field">
+          Comisión de buscaDR (%)
+          <input type="number" className="input" min={0} max={30} step={0.5} value={fee} onChange={(e) => setFee(e.target.value)} required />
+        </label>
+        <label className="field">
+          Días de retención tras la cita
+          <input type="number" className="input" min={0} max={30} step={1} value={days} onChange={(e) => setDays(e.target.value)} required />
+        </label>
+        <label className="field">
+          Liquidación mínima (USD)
+          <input type="number" className="input" min={0} max={1000} step={1} value={min} onChange={(e) => setMin(e.target.value)} required />
+        </label>
+        <p className="text-sm sm:col-span-3 muted">
+          Ejemplo: en una cita de {money(example)} el profesional recibe{" "}
+          <strong className="text-tinta">{money(Math.round(example * (1 - bps / 10_000)))}</strong> y buscaDR {money(Math.round((example * bps) / 10_000))} (
+          {pct(bps)}). Su parte queda disponible {days} {days === "1" ? "día" : "días"} después de atenderla y se transfiere en Administración → Liquidaciones.
+        </p>
+        <div className="sm:col-span-3">
+          <button type="submit" className="btn" disabled={busy}>
+            {busy ? <Spinner label="Guardando" /> : <Icon name="check" className="size-4" />} Guardar ajustes de cobro
+          </button>
+        </div>
+      </form>
+    </Section>
   );
 }

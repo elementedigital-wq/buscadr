@@ -350,11 +350,13 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               {home.proText}
             </p>
             <ul className="mt-5 grid gap-2 text-sm sm:grid-cols-2">
-              {["Calendario y confirmación de citas", "Confirmación desde WhatsApp", "Tarifa presencial y virtual", "Cobros en línea registrados"].map((t) => (
-                <li key={t} className="flex items-center gap-2">
-                  <Icon name="check-circle" className="size-4 text-[#6ee7b7]" /> {t}
-                </li>
-              ))}
+              {["Calendario y confirmación de citas", "Confirmación desde WhatsApp", "Tarifa presencial y virtual", "Cobro con tarjeta y liquidación"].map(
+                (t) => (
+                  <li key={t} className="flex items-center gap-2">
+                    <Icon name="check-circle" className="size-4 text-[#6ee7b7]" /> {t}
+                  </li>
+                ),
+              )}
             </ul>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/para-profesionales" className="btn btn-sm bg-white text-tinta hover:bg-celeste" data-cms="buttons.pro">

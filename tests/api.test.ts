@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { scheduledMaintenance } from "../server/cron";
 import type { Env } from "../server/env";
 import { hmacHex } from "../server/lib/crypto";
-import { Browser, PNG, admin, key, publishedPractitioner, register, weekday } from "./helpers";
+import { Browser, CARD, PNG, admin, bookPaid, key, publishedPractitioner, register, weekday } from "./helpers";
 
 const db = (env as unknown as Env).DB;
 
@@ -135,21 +135,24 @@ describe("panel profesional", () => {
 });
 
 describe("citas", () => {
-  it("flujo presencial: solicitud → confirmación del médico → atendida → pago en consultorio → opinión verificada", async () => {
+  it("flujo presencial: solicitud → pago con tarjeta → confirmación del médico → atendida → opinión verificada", async () => {
     const { pro, id, slug } = await publishedPractitioner();
     const patient = await register("patient", { phone: "0987654321", whatsapp_opt_in: true });
     const start = weekday(2, 9);
+    // Solo tarjeta: aunque pida pagar en el consultorio, la cita se paga al reservar.
     const res = await patient.browser.post("/api/appointments", {
       practitioner_id: id,
       start,
       modality: "presencial",
+      payment_mode: "consultorio",
       idempotency_key: key(),
       reason: "Control",
     });
     expect(res.status).toBe(201);
     expect(res.data.status).toBe("solicitada");
-    expect(res.data.checkout).toBeNull();
+    expect(res.data.checkout).toMatch(/^\/pagar\//);
     const aid = res.data.id;
+    expect((await patient.browser.post(`/api/payments/${String(res.data.checkout).split("/").pop()}/sandbox`, CARD)).data.status).toBe("aprobado");
     // El paciente no puede confirmar su propia cita; otra cuenta ni siquiera la ve.
     expect((await patient.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(409);
     const stranger = await register("patient");
@@ -175,11 +178,11 @@ describe("citas", () => {
       .prepare("UPDATE appointments SET start_ms=?, end_ms=? WHERE id=?")
       .bind(Date.now() - 600_000, Date.now() + 1_200_000, aid)
       .run();
+    expect((await pro.browser.get(`/api/appointments/${aid}`)).data.appointment.actions).not.toContain("mark_paid");
     expect((await pro.browser.post(`/api/appointments/${aid}/actions/complete`)).status).toBe(200);
-    expect((await pro.browser.post(`/api/appointments/${aid}/actions/mark_paid`, { body: "efectivo" })).status).toBe(200);
+    expect((await pro.browser.post(`/api/appointments/${aid}/actions/mark_paid`, { body: "efectivo" })).status).toBe(409);
     const income = await pro.browser.get("/api/pro/income");
-    expect(income.data.totals.office_cents).toBe(4000);
-    expect(income.data.items[0].provider).toBe("consultorio");
+    expect(income.data.totals).toMatchObject({ gross_cents: 4000, fee_cents: 320, net_cents: 3680, office_cents: 0 });
     const review = await patient.browser.post(`/api/appointments/${aid}/actions/review`, { rating: 5, body: "Muy amable y puntual." });
     expect(review.status).toBe(200);
     expect((await patient.browser.post(`/api/appointments/${aid}/actions/review`, { rating: 4 })).status).toBe(409);
@@ -293,14 +296,19 @@ describe("citas", () => {
     expect((await pro.browser.post(`/api/appointments/${moved.data.id}/actions/confirm`)).status).toBe(409);
   });
 
-  it("perfiles de muestra: cita de prueba confirmada al instante sin ocupar la agenda", async () => {
+  it("perfiles de muestra: pago con tarjeta de prueba, confirmada al instante y sin ocupar la agenda", async () => {
     const p1 = await register("patient");
     const p2 = await register("patient");
     const start = weekday(2, 9);
-    const a = await p1.browser.post("/api/appointments", { practitioner_id: 4, start, modality: "presencial", idempotency_key: key() });
+    const a = await bookPaid(p1, { practitioner_id: 4, start, modality: "presencial" });
+    expect(a.created.demo).toBe(true);
+    const pay = await db.prepare("SELECT gateway FROM payments WHERE id=?").bind(a.payId).first<{ gateway: string }>();
+    expect(pay?.gateway).toBe("sandbox");
+    const row = await db.prepare("SELECT status FROM appointments WHERE id=?").bind(a.id).first<{ status: string }>();
+    expect(row?.status).toBe("confirmada");
+    // Las citas de muestra no generan saldo a liquidar.
+    expect(await db.prepare("SELECT 1 FROM earnings WHERE payment_id=?").bind(a.payId).first()).toBeNull();
     const b = await p2.browser.post("/api/appointments", { practitioner_id: 4, start, modality: "presencial", idempotency_key: key() });
-    expect(a.data.status).toBe("confirmada");
-    expect(a.data.demo).toBe(true);
     expect(b.status).toBe(201);
   });
 });
@@ -316,7 +324,7 @@ describe("WhatsApp", () => {
   it("el profesional confirma la cita con el botón de WhatsApp (una sola vez)", async () => {
     const { id } = await publishedPractitioner();
     const patient = await register("patient");
-    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(4, 16), modality: "presencial", idempotency_key: key() });
+    const res = { data: await bookPaid(patient, { practitioner_id: id, start: weekday(4, 16), modality: "presencial" }) };
     const body = JSON.stringify({
       entry: [
         {
@@ -518,64 +526,47 @@ describe("pasarelas de pago (CMS)", () => {
     expect((await adminPut(adm, "payphone", { enabled: false, secrets: { token: null, store_id: null } })).status).toBe(200);
   });
 
-  it("transferencia bancaria: el paciente la elige, registra el comprobante y la administración la confirma", async () => {
+  it("solo tarjeta: transferencia y consultorio no se activan y siempre queda un medio con tarjeta", async () => {
     const adm = await admin();
+    const list = await adm.get("/api/cms/payments");
+    const byId = (id: string) => list.data.gateways.find((g: { id: string }) => g.id === id);
+    expect(byId("transferencia")).toMatchObject({ card: false, enabled: false, active: false });
+    expect(byId("consultorio")).toMatchObject({ card: false, enabled: false, active: false });
+    expect(byId("transferencia").blocked).toMatch(/solo con tarjeta/);
     const bank = { bank: "Banco Pichincha", account_type: "Ahorros", account_number: "2201234567", holder: "buscaDR S.A.S.", id_number: "0999999999001" };
-    expect((await adminPut(adm, "transferencia", { settings: { ...bank, account_type: "Plazo fijo" } })).status).toBe(400);
-    expect((await adminPut(adm, "transferencia", { settings: bank, enabled: true, confirm_live: true })).status).toBe(200);
-
-    const { pro, id } = await publishedPractitioner();
-    const patient = await register("patient");
-    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
-    const payId = res.data.checkout.split("/").pop();
-    const view = await patient.browser.get(`/api/payments/${payId}`);
-    const transfer = view.data.methods.find((m: { id: string }) => m.id === "transferencia");
-    expect(transfer.bank.account_number).toBe("2201234567");
-    expect((await patient.browser.post(`/api/payments/${payId}/method`, { gateway: "kushki" })).status).toBe(400);
-    expect((await patient.browser.post(`/api/payments/${payId}/method`, { gateway: "transferencia" })).status).toBe(200);
-    const pending = await patient.browser.get(`/api/payments/${payId}`);
-    expect(pending.data.payment).toMatchObject({ gateway: "transferencia", status: "pendiente" });
-    expect(pending.data.payment.reference).toMatch(/^BDR-[0-9A-F]{8}$/);
-    // La retención del horario se alarga (la confirmación es manual).
-    const hold = await db.prepare("SELECT hold_expires_ms FROM appointments WHERE id=?").bind(res.data.id).first<{ hold_expires_ms: number }>();
-    expect((hold?.hold_expires_ms ?? 0) - Date.now()).toBeGreaterThan(60 * 60_000);
-    // Ya no se puede pagar con la tarjeta de prueba sin volver a elegirla.
-    expect((await patient.browser.post(`/api/payments/${payId}/sandbox`, { number: "4111 1111 1111 1111", exp: "12/30", cvv: "123", name: "P" })).status).toBe(
-      409,
-    );
-    expect((await patient.browser.post(`/api/payments/${payId}/transfer`, { receipt: "12" })).status).toBe(400);
-    expect((await patient.browser.post(`/api/payments/${payId}/transfer`, { receipt: "COMP-778899" })).status).toBe(200);
-    // Solo la administración confirma.
-    expect((await pro.browser.post(`/api/admin/payments/${payId}/transfer`, { decision: "approve" })).status).toBe(403);
-    const ok = await adm.post(`/api/admin/payments/${payId}/transfer`, { decision: "approve" });
-    expect(ok.data.status).toBe("aprobado");
-    const appt = await db.prepare("SELECT payment_status FROM appointments WHERE id=?").bind(res.data.id).first<{ payment_status: string }>();
-    expect(appt?.payment_status).toBe("pagado");
-    const income = await pro.browser.get("/api/pro/income");
-    expect(income.data.totals.online_cents).toBeGreaterThan(0);
-    expect((await adminPut(adm, "transferencia", { enabled: false })).status).toBe(200);
-  });
-
-  it("sin pago en el consultorio la cita se paga en línea; sin medios en línea, en el consultorio", async () => {
-    const adm = await admin();
+    expect((await adminPut(adm, "transferencia", { settings: bank, enabled: true, confirm_live: true })).data.code).toBe("CARD_ONLY");
+    expect((await adminPut(adm, "consultorio", { enabled: true })).data.code).toBe("CARD_ONLY");
+    // El modo de prueba es el único medio con tarjeta activo: no se puede apagar.
+    expect((await adminPut(adm, "sandbox", { enabled: false })).data.code).toBe("LAST_CARD_GATEWAY");
+    const cat = await new Browser().get("/api/catalog");
+    expect(cat.data.gateways.map((g: { id: string }) => g.id)).toEqual(["sandbox"]);
+    // Sin medios con tarjeta (p. ej. credenciales retiradas) nadie reserva una cita con tarifa.
+    await db.prepare("UPDATE payment_gateways SET enabled=0 WHERE id='sandbox'").run();
     const { id } = await publishedPractitioner();
     const patient = await register("patient");
-    expect((await adminPut(adm, "consultorio", { enabled: false })).status).toBe(200);
-    const online = await patient.browser.post("/api/appointments", {
+    const blocked = await patient.browser.post("/api/appointments", {
       practitioner_id: id,
       start: weekday(4, 9),
       modality: "presencial",
       idempotency_key: key(),
     });
-    expect(online.data.checkout).toMatch(/^\/pagar\//);
-    expect((await adminPut(adm, "consultorio", { enabled: true })).status).toBe(200);
-    expect((await adminPut(adm, "sandbox", { enabled: false })).status).toBe(200);
-    const office = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(4, 10), modality: "virtual", idempotency_key: key() });
-    expect(office.status).toBe(201);
-    expect(office.data.checkout).toBeNull();
-    const row = await db.prepare("SELECT payment_mode FROM appointments WHERE id=?").bind(office.data.id).first<{ payment_mode: string }>();
-    expect(row?.payment_mode).toBe("consultorio");
-    expect((await adminPut(adm, "sandbox", { enabled: true })).status).toBe(200);
+    expect(blocked.status).toBe(503);
+    expect(blocked.data.code).toBe("NO_CARD_GATEWAY");
+    await db.prepare("UPDATE payment_gateways SET enabled=1 WHERE id='sandbox'").run();
+  });
+
+  it("la comisión se edita en el CMS y se aplica a las reservas nuevas", async () => {
+    const adm = await admin();
+    expect((await adm.put("/api/cms/payments/settings", { fee_bps: 5000 })).status).toBe(400);
+    const saved = await adm.put("/api/cms/payments/settings", { fee_bps: 1000, release_days: 0, min_payout_cents: 500 });
+    expect(saved.data.settings).toMatchObject({ fee_bps: 1000, release_days: 0, min_payout_cents: 500 });
+    expect((await new Browser().get("/api/catalog")).data.fee_bps).toBe(1000);
+    const { id } = await publishedPractitioner();
+    const patient = await register("patient");
+    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(3, 9), modality: "presencial", idempotency_key: key() });
+    const row = await db.prepare("SELECT fee_cents,net_cents FROM appointments WHERE id=?").bind(res.data.id).first();
+    expect(row).toEqual({ fee_cents: 400, net_cents: 3600 });
+    await adm.put("/api/cms/payments/settings", { fee_bps: 800, release_days: 2, min_payout_cents: 1000 });
   });
 });
 
@@ -584,14 +575,7 @@ describe("trazabilidad con QR y satisfacción por etapa", () => {
   async function confirmedSoon(extra: Record<string, unknown> = {}) {
     const pp = await publishedPractitioner(extra);
     const patient = await register("patient");
-    const res = await patient.browser.post("/api/appointments", {
-      practitioner_id: pp.id,
-      start: weekday(2, 10),
-      modality: "presencial",
-      idempotency_key: key(),
-    });
-    expect(res.status).toBe(201);
-    const aid = res.data.id as number;
+    const { id: aid } = await bookPaid(patient, { practitioner_id: pp.id, start: weekday(2, 10), modality: "presencial" });
     expect((await pp.pro.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(200);
     const start = Date.now() + 20 * 60_000;
     await db
@@ -686,10 +670,9 @@ describe("trazabilidad con QR y satisfacción por etapa", () => {
   });
 
   it("cita virtual: el ingreso del paciente a la videoconsulta registra la llegada; completar sin QR registra el cierre", async () => {
-    const { pro, id } = await publishedPractitioner({ prepay_virtual: false });
+    const { pro, id } = await publishedPractitioner();
     const patient = await register("patient");
-    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(2, 11), modality: "virtual", idempotency_key: key() });
-    const aid = res.data.id;
+    const { id: aid } = await bookPaid(patient, { practitioner_id: id, start: weekday(2, 11), modality: "virtual" });
     expect((await pro.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(200);
     const start = Date.now() + 10 * 60_000;
     await db
@@ -705,5 +688,245 @@ describe("trazabilidad con QR y satisfacción por etapa", () => {
     expect((await pro.browser.post(`/api/appointments/${aid}/actions/complete`)).status).toBe(200);
     const after = await patient.browser.get(`/api/trace/appointments/${aid}`);
     expect(after.data.stages.map((s: { status: string }) => s.status)).toEqual(["confirmada", "confirmada", "sin_registro", "confirmada"]);
+  });
+});
+
+describe("liquidación al profesional", () => {
+  it("cobro con tarjeta → parte del médico retenida → disponible al atender → liquidación transferida con referencia", async () => {
+    const { pro, id } = await publishedPractitioner();
+    const patient = await register("patient");
+    const { id: aid, payId } = await bookPaid(patient, { practitioner_id: id, start: weekday(2, 16), modality: "presencial" });
+    expect((await pro.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(200);
+    const line = () =>
+      db.prepare("SELECT status,net_cents,fee_cents,test,payout_id FROM earnings WHERE payment_id=? AND kind='cita'").bind(payId).first<Record<string, any>>();
+    expect(await line()).toMatchObject({ status: "retenido", net_cents: 3680, fee_cents: 320, test: 1 });
+    // Se simula un cobro real (Payphone) para probar la transferencia a la cuenta del profesional.
+    await db.prepare("UPDATE earnings SET test=0 WHERE payment_id=?").bind(payId).run();
+    await db
+      .prepare("UPDATE appointments SET start_ms=?,end_ms=? WHERE id=?")
+      .bind(Date.now() - 600_000, Date.now() + 1_200_000, aid)
+      .run();
+    expect((await pro.browser.post(`/api/appointments/${aid}/actions/complete`)).status).toBe(200);
+    expect((await line())?.status).toBe("disponible");
+    let mine = await pro.browser.get("/api/pro/payouts");
+    expect(mine.data.balance.real).toMatchObject({ releasing: 3680, available: 0 });
+    expect(mine.data.settings.fee_bps).toBe(800);
+    // Pasan los días de retención.
+    await db
+      .prepare("UPDATE earnings SET available_ms=? WHERE payment_id=?")
+      .bind(Date.now() - 1000, payId)
+      .run();
+    const adm = await admin();
+    expect((await pro.browser.post("/api/admin/payouts", { practitioner_id: id })).status).toBe(403);
+    const noAccount = await adm.post("/api/admin/payouts", { practitioner_id: id });
+    expect(noAccount.data.results[0].skipped).toMatch(/cuenta bancaria/);
+    // Cuenta del profesional: validada, cifrada y enmascarada.
+    expect(
+      (
+        await pro.browser.put("/api/pro/payouts/account", {
+          bank: "Banco Pichincha",
+          account_type: "Ahorros",
+          account_number: "22012",
+          holder: "Ana",
+          id_number: "1",
+        })
+      ).status,
+    ).toBe(400);
+    const acc = await pro.browser.put("/api/pro/payouts/account", {
+      bank: "Banco Pichincha",
+      account_type: "Ahorros",
+      account_number: "2201234567",
+      holder: "Ana Prueba",
+      id_number: "0912345678",
+    });
+    expect(acc.status).toBe(200);
+    expect(acc.data.account.hint).toBe("Banco Pichincha · Ahorros ••••4567 · Ana Prueba");
+    const stored = await db.prepare("SELECT payout_account_enc FROM practitioners WHERE id=?").bind(id).first<{ payout_account_enc: string }>();
+    expect(stored?.payout_account_enc).toMatch(/^v1:/);
+    expect(stored?.payout_account_enc).not.toContain("2201234567");
+    expect(JSON.stringify((await pro.browser.get("/api/pro/me")).data)).not.toContain("payout_account");
+
+    const created = await adm.post("/api/admin/payouts", { practitioner_id: id });
+    expect(created.data.created).toBe(1);
+    const po = created.data.results[0];
+    expect(po.amount_cents).toBe(3680);
+    expect((await line())?.status).toBe("liquidando");
+    const csv = await adm.call("GET", "/api/admin/payouts/export");
+    expect(csv.data.text).toContain("2201234567");
+    expect(csv.data.text).toContain(`BUSCADR-LIQ-${po.payout_id}`);
+    expect((await adm.post(`/api/admin/payouts/${po.payout_id}/paid`, { reference: "" })).status).toBe(400);
+    expect((await adm.post(`/api/admin/payouts/${po.payout_id}/paid`, { reference: "TRF-889900" })).status).toBe(200);
+    expect((await adm.post(`/api/admin/payouts/${po.payout_id}/paid`, { reference: "TRF-889900" })).status).toBe(409);
+    expect((await line())?.status).toBe("pagado");
+    mine = await pro.browser.get("/api/pro/payouts");
+    expect(mine.data.balance.real.paid).toBe(3680);
+    expect(mine.data.payouts[0]).toMatchObject({ status: "pagada", reference: "TRF-889900", amount_cents: 3680 });
+    const note = (await pro.browser.get("/api/me/notifications")).data.items.find((n: { kind: string }) => n.kind === "liquidacion_pagada");
+    expect(note.body).toContain("$36.80");
+    // Un reembolso posterior se descuenta de la próxima liquidación con una línea de ajuste.
+    expect((await adm.post(`/api/admin/payments/${payId}/refund`, { reason: "Reclamo" })).status).toBe(200);
+    const adj = await db.prepare("SELECT net_cents,status FROM earnings WHERE payment_id=? AND kind='ajuste'").bind(payId).first();
+    expect(adj).toEqual({ net_cents: -3680, status: "disponible" });
+  });
+
+  it("reembolso antes de liquidar anula la línea; la cancelación tardía la libera; los cobros de prueba se liquidan aparte", async () => {
+    const { pro, id } = await publishedPractitioner();
+    const patient = await register("patient");
+    const a = await bookPaid(patient, { practitioner_id: id, start: weekday(3, 9), modality: "virtual" });
+    expect((await patient.browser.post(`/api/appointments/${a.id}/actions/cancel`, { reason: "Viaje" })).data.refunded).toBe(true);
+    expect((await db.prepare("SELECT status FROM earnings WHERE payment_id=?").bind(a.payId).first<{ status: string }>())?.status).toBe("anulado");
+    const b = await bookPaid(patient, { practitioner_id: id, start: weekday(3, 10), modality: "virtual" });
+    expect((await pro.browser.post(`/api/appointments/${b.id}/actions/confirm`)).status).toBe(200);
+    await db
+      .prepare("UPDATE appointments SET start_ms=?,end_ms=?,block_until_ms=? WHERE id=?")
+      .bind(Date.now() + 3_600_000, Date.now() + 5_400_000, Date.now() + 5_400_000, b.id)
+      .run();
+    const late = await patient.browser.post(`/api/appointments/${b.id}/actions/cancel`, { reason: "Imprevisto" });
+    expect(late.data.refunded).toBe(false);
+    const e = await db.prepare("SELECT status,test FROM earnings WHERE payment_id=?").bind(b.payId).first();
+    expect(e).toMatchObject({ status: "disponible", test: 1 });
+    await db
+      .prepare("UPDATE earnings SET available_ms=? WHERE payment_id=?")
+      .bind(Date.now() - 1000, b.payId)
+      .run();
+    const adm = await admin();
+    // Sin cuenta bancaria también se registra (prueba: no se transfiere dinero).
+    const created = await adm.post("/api/admin/payouts", { practitioner_id: id, test: true });
+    expect(created.data.results[0].amount_cents).toBe(2760);
+    const list = await adm.get("/api/admin/payouts");
+    expect(list.data.payouts.find((p: { id: number }) => p.id === created.data.results[0].payout_id)).toMatchObject({ test: 1, status: "pendiente" });
+    expect((await adm.post(`/api/admin/payouts/${created.data.results[0].payout_id}/cancel`)).status).toBe(200);
+    expect(await db.prepare("SELECT status,payout_id FROM earnings WHERE payment_id=?").bind(b.payId).first()).toEqual({
+      status: "disponible",
+      payout_id: null,
+    });
+  });
+});
+
+describe("citas subsecuentes", () => {
+  /** Profesional con un paciente ya atendido (requisito para programarle una serie). */
+  async function withPatient() {
+    const pp = await publishedPractitioner();
+    const patient = await register("patient", { name: "Lucía Paciente" });
+    const first = await bookPaid(patient, { practitioner_id: pp.id, start: weekday(2, 9), modality: "presencial" });
+    expect((await pp.pro.browser.post(`/api/appointments/${first.id}/actions/confirm`)).status).toBe(200);
+    return { ...pp, patient, ref: first.id };
+  }
+
+  it("el profesional propone la serie, el paciente la acepta, paga cada sesión con tarjeta y las no pagadas se liberan", async () => {
+    const { pro, patient, ref, id } = await withPatient();
+    const list = await pro.browser.get(`/api/pro/followups?cita=${ref}`);
+    expect(list.data.patients[0]).toMatchObject({ ref, name: "Lucía Paciente" });
+    expect(list.data.prefill).toMatchObject({ ref });
+    const series = { first_start: weekday(3, 11), interval_days: 7, sessions: 3, modality: "presencial" };
+    const preview = await pro.browser.post("/api/pro/followups/preview", series);
+    expect(preview.data.ok).toBe(true);
+    expect(preview.data.sessions).toHaveLength(3);
+    expect((await pro.browser.post("/api/pro/followups", { ...series, patient_ref: 999999, title: "Control", price_cents: 2500 })).status).toBe(400);
+    const created = await pro.browser.post("/api/pro/followups", {
+      ...series,
+      patient_ref: ref,
+      title: "Control de presión arterial",
+      note: "Traer registro de tomas",
+      price_cents: 2500,
+    });
+    expect(created.status).toBe(201);
+    const planId = created.data.id;
+    // El aviso no incluye el título (puede ser información de salud).
+    const notes = (await patient.browser.get("/api/me/notifications")).data.items;
+    const proposal = notes.find((n: { kind: string }) => n.kind === "subsecuentes_propuesta");
+    expect(proposal.body).toContain("3 citas presenciales");
+    expect(JSON.stringify(notes)).not.toContain("presión");
+    expect((await (await register("patient")).browser.get(`/api/followups/${planId}`)).status).toBe(404);
+    const mine = await patient.browser.get("/api/followups");
+    expect(mine.data.plans[0]).toMatchObject({ id: planId, status: "propuesta", total_cents: 7500, can: { accept: true } });
+    // Aceptar agenda las tres sesiones como citas confirmadas con pago con tarjeta pendiente.
+    const ok = await patient.browser.post(`/api/followups/${planId}/accept`);
+    expect(ok.data).toMatchObject({ scheduled: 3, conflicts: 0, pay_first: true });
+    expect((await patient.browser.post(`/api/followups/${planId}/accept`)).status).toBe(409);
+    const appts = (
+      await db
+        .prepare(
+          "SELECT a.id,a.status,a.payment_status,a.hold_expires_ms,a.start_ms,a.fee_cents FROM followup_sessions s JOIN appointments a ON a.id=s.appointment_id WHERE s.plan_id=? ORDER BY s.seq",
+        )
+        .bind(planId)
+        .all<Record<string, any>>()
+    ).results;
+    expect(appts.map((a) => [a.status, a.payment_status])).toEqual([
+      ["confirmada", "pendiente"],
+      ["confirmada", "pendiente"],
+      ["confirmada", "pendiente"],
+    ]);
+    expect(appts[1].hold_expires_ms).toBe(appts[1].start_ms - 86_400_000);
+    expect(appts[0].fee_cents).toBe(200);
+    const listed = await patient.browser.get("/api/appointments");
+    const item = (listed.data.items ?? listed.data.appointments).find((x: { id: number }) => x.id === appts[0].id);
+    expect(item.followup).toEqual({ plan_id: planId, seq: 1, total: 3 });
+    // Paga la primera sesión con la tarjeta de prueba.
+    const pay = await patient.browser.post(`/api/appointments/${appts[0].id}/actions/pay`);
+    const payId = String(pay.data.checkout).split("/").pop();
+    expect((await patient.browser.post(`/api/payments/${payId}/sandbox`, CARD)).data.status).toBe("aprobado");
+    const paid = await db.prepare("SELECT status,payment_status,hold_expires_ms FROM appointments WHERE id=?").bind(appts[0].id).first();
+    expect(paid).toEqual({ status: "confirmada", payment_status: "pagado", hold_expires_ms: null });
+    // La segunda no se paga a tiempo: el mantenimiento la libera.
+    await db
+      .prepare("UPDATE appointments SET hold_expires_ms=? WHERE id=?")
+      .bind(Date.now() - 1000, appts[1].id)
+      .run();
+    const result = await scheduledMaintenance(env as unknown as Env);
+    expect(result.released).toBeGreaterThanOrEqual(1);
+    expect((await db.prepare("SELECT status FROM appointments WHERE id=?").bind(appts[1].id).first<{ status: string }>())?.status).toBe("cancelada");
+    const view = await pro.browser.get(`/api/followups/${planId}`);
+    expect(view.data.role).toBe("pro");
+    expect(view.data.plan.summary).toMatchObject({ total: 3, upcoming: 2, unpaid: 1, cancelled: 1 });
+    expect(view.data.plan.patient_name).toBe("Lucía Paciente");
+    // El paciente cancela lo que falta; la sesión pagada se reembolsa (más de 4 h antes).
+    const cancel = await patient.browser.post(`/api/followups/${planId}/cancel`, { reason: "Cambio de ciudad" });
+    expect(cancel.data).toMatchObject({ cancelled: 2, refunded: 1 });
+    expect((await pro.browser.get("/api/me/notifications")).data.items[0].kind).toBe("subsecuentes_cancelada");
+    expect((await pro.browser.get(`/api/pro/followups`)).data.plans.find((p: { id: number }) => p.id === planId).status).toBe("cancelada");
+    expect(id).toBeGreaterThan(0);
+  });
+
+  it("valida conflictos con la agenda, el rechazo del paciente y reagenda sesiones ocupadas", async () => {
+    const { pro, patient, ref, id } = await withPatient();
+    // Otra cita ocupa la tercera semana.
+    const other = await register("patient");
+    const busy = weekday(3, 15);
+    const taken = await bookPaid(other, { practitioner_id: id, start: busy, modality: "presencial" });
+    expect(taken.id).toBeGreaterThan(0);
+    const series = { first_start: busy, interval_days: 14, sessions: 2, modality: "presencial", patient_ref: ref, title: "Curaciones", price_cents: 0 };
+    const preview = await pro.browser.post("/api/pro/followups/preview", series);
+    expect(preview.data.ok).toBe(false);
+    expect(preview.data.sessions[0]).toMatchObject({ conflict: "ocupado", blocking: true });
+    expect((await pro.browser.post("/api/pro/followups", series)).data.code).toBe("FOLLOWUP_CONFLICT");
+    // Fuera del horario habitual es solo un aviso.
+    const evening = await pro.browser.post("/api/pro/followups/preview", { ...series, first_start: weekday(3, 21) });
+    expect(evening.data.sessions[0]).toMatchObject({ conflict: "fuera_horario", blocking: false });
+    // Rechazo del paciente.
+    const p1 = await pro.browser.post("/api/pro/followups", { ...series, first_start: weekday(4, 11) });
+    expect((await patient.browser.post(`/api/followups/${p1.data.id}/decline`, { reason: "Prefiero otra fecha" })).status).toBe(200);
+    expect((await pro.browser.get(`/api/followups/${p1.data.id}`)).data.plan.status).toBe("rechazada");
+    // Sesión gratuita que se ocupa antes de aceptar: queda por reagendar y el profesional la reagenda.
+    const p2 = await pro.browser.post("/api/pro/followups", { ...series, first_start: weekday(8, 15) });
+    const sessions = await db.prepare("SELECT start_ms FROM followup_sessions WHERE plan_id=? ORDER BY seq").bind(p2.data.id).all<{ start_ms: number }>();
+    await bookPaid(other, {
+      practitioner_id: id,
+      start: new Date(sessions.results[1].start_ms - 5 * 3_600_000).toISOString().slice(0, 16),
+      modality: "presencial",
+    });
+    const accepted = await patient.browser.post(`/api/followups/${p2.data.id}/accept`);
+    expect(accepted.data).toMatchObject({ scheduled: 1, conflicts: 1, pay_first: false });
+    const free = await db
+      .prepare("SELECT a.payment_status,a.price_cents FROM followup_sessions s JOIN appointments a ON a.id=s.appointment_id WHERE s.plan_id=? AND s.seq=1")
+      .bind(p2.data.id)
+      .first();
+    expect(free).toEqual({ payment_status: "no_requerido", price_cents: 0 });
+    const plan = (await pro.browser.get("/api/pro/followups")).data.plans.find((p: { id: number }) => p.id === p2.data.id);
+    expect(plan.summary.conflicts).toBe(1);
+    expect(plan.sessions[1].status_label).toBe("Por reagendar");
+    const re = await pro.browser.post(`/api/pro/followups/${p2.data.id}/sessions/2`, { start: weekday(8, 16) });
+    expect(re.status).toBe(200);
+    expect((await patient.browser.get(`/api/followups/${p2.data.id}`)).data.plan.summary).toMatchObject({ upcoming: 2, conflicts: 0 });
   });
 });

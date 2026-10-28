@@ -10,7 +10,7 @@ export const meta: Route.MetaFunction = () => [
   {
     name: "description",
     content:
-      "Recibe citas presenciales y virtuales con tarifas diferenciadas, confirma desde WhatsApp, cobra en línea con buscaDR Pay y gestiona tu consultorio desde un panel personalizado.",
+      "Recibe citas presenciales y virtuales con tarifas diferenciadas, confirma desde WhatsApp, cobra con tarjeta a través de buscaDR (te transferimos tu parte) y programa citas subsecuentes desde un panel personalizado.",
   },
 ];
 
@@ -28,7 +28,13 @@ const FEATURES = [
     "Cada solicitud llega con botones Confirmar o Rechazar. El paciente recibe el aviso y los recordatorios automáticos.",
   ],
   ["video", "cielo", "Teleconsulta integrada", "Activa citas virtuales con su propia tarifa. La sala de video se crea sola y se abre 15 minutos antes."],
-  ["wallet", "azul", "Cobros con buscaDR Pay", "Pago anticipado para asegurar el horario y registro de cada transacción, incluso los cobros en consultorio."],
+  [
+    "wallet",
+    "azul",
+    "Cobro con tarjeta y liquidación",
+    "El paciente paga con tarjeta al reservar; buscaDR cobra, retiene su comisión y te transfiere tu parte con cada liquidación.",
+  ],
+  ["repeat", "verde", "Citas subsecuentes", "Programa series de controles (prenatales, crónicos, terapias) que el paciente acepta y paga sesión por sesión."],
   ["chart", "verde", "Panel de tu consultorio", "Citas del día, solicitudes pendientes, ingresos del mes, tasa de asistencia y opiniones."],
   [
     "verified",

@@ -9,6 +9,8 @@ import { auth } from "./routes/auth";
 import { me } from "./routes/me";
 import { payments } from "./routes/payments";
 import { favorites, practitioners } from "./routes/practitioners";
+import { followups, proFollowups } from "./routes/followups";
+import { proPayouts } from "./routes/payouts";
 import { pro } from "./routes/pro";
 import { system } from "./routes/system";
 import { trace } from "./routes/trace";
@@ -51,6 +53,8 @@ api.route("/auth", auth);
 api.route("/practitioners", practitioners);
 api.route("/me/favorites", favorites);
 api.route("/me", me);
+api.route("/pro/payouts", proPayouts);
+api.route("/pro/followups", proFollowups);
 api.route("/pro", pro);
 api.route("/appointments", appointments);
 api.route("/payments", payments);
@@ -58,6 +62,7 @@ api.route("/admin", admin);
 api.route("/cms", cms);
 api.route("/whatsapp", whatsapp);
 api.route("/trace", trace);
+api.route("/followups", followups);
 
 api.notFound((c) => c.json({ error: "Endpoint no encontrado", code: "NOT_FOUND", request_id: c.get("requestId") }, 404));
 

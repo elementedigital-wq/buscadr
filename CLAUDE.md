@@ -19,17 +19,18 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - Secretos solo en Cloudflare: `BUSCADR_ADMIN_PASSWORD` (contraseña inicial del propietario), `BUSCADR_SECRETS_KEY` (clave para cifrar en D1 las credenciales de pasarelas cargadas en el CMS, ADR 0013), `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID`.
 - Taxonomía: 83 especialidades base en 11 categorías (`server/lib/taxonomy-data.ts`, slugs permanentes) + propias del CMS; usar siempre `getTaxonomy()` en el servidor (ADR 0014).
 - Trazabilidad: etapas reserva → llegada → consulta → cierre en `care_stages`, QR de cita (`a_…`) y de recepción (`r_…`) resueltos en `/q/:token`, satisfacción 1–5 por etapa en `stage_ratings`, privada y agregada solo con 3+ respuestas (`server/lib/trace.ts`, `server/routes/trace.ts`, ADR 0015).
-- Pagos: medios configurables en CMS → Pasarelas de pago (`server/lib/gateways.ts`); `payments.gateway` identifica el medio (ADR 0013).
+- Pagos: SOLO tarjeta (crédito o débito) con los medios del CMS → Pasarelas de pago (`server/lib/gateways.ts`, ADR 0013/0016); `payments.gateway` identifica el medio. buscaDR cobra y liquida al profesional su parte: libro `earnings` → `payouts` (`server/lib/payouts.ts`), comisión editable en `platform_settings` (`getPayoutSettings()`).
+- Citas subsecuentes: series `followup_plans`/`followup_sessions` (`server/routes/followups.ts`, ADR 0017); cada sesión es una cita confirmada con pago con tarjeta hasta 24 h antes.
 - Propietario del CMS: `elemente.digital@gmail.com` (`server/lib/owner.ts`, ADR 0008). Solo esa cuenta ve y usa `/maestro` y `/admin` (`cms: true` en `/api/auth/me`).
 - Comandos: `npm run dev`, `npm test`, `npm run check`, `npm run test:e2e`, `npm run test:layout` (sin desbordes ni texto aplastado en 320–1440 px), `npm run test:a11y` (axe, WCAG 2.2 AA), `npm run icons`.
 
 ## Reglas no negociables
 - Preservar cuentas, sesiones (`__Host-buscadr_session`), citas, pagos y datos D1. Nunca `DROP`, `DELETE` masivo, renombrar ni cambiar tipos en migraciones.
 - `npm run check` completo antes de cada push a `main`.
-- Pagos: solo el medio de prueba activo hasta el Go/No-Go del Documento Maestro. Nunca guardar número completo de tarjeta ni CVV. Cada cobro queda en `payments` + `payment_events`. Credenciales de pasarelas solo cifradas (nunca en claro en D1, respuestas, logs ni auditoría).
+- Pagos: solo el medio de prueba activo hasta el Go/No-Go del Documento Maestro. Nunca guardar número completo de tarjeta ni CVV. Cada cobro queda en `payments` + `payment_events`. Credenciales de pasarelas y cuentas bancarias de profesionales solo cifradas (nunca en claro en D1, respuestas, logs ni auditoría). No reactivar pago en consultorio ni transferencias del paciente sin decisión del propietario.
 - Distinguir siempre perfiles de muestra, piloto y funciones reales. Nunca presentar opiniones, registros profesionales, «Verificado» o cifras ficticias como reales.
 - Calificaciones por etapa: nunca mostrar autor ni respuestas individuales al profesional.
-- Salud: sin promesas clínicas ni diagnósticos; aviso de emergencias (911) siempre visible; motivo de consulta solo para las dos partes y nunca en avisos de WhatsApp o correo.
+- Salud: sin promesas clínicas ni diagnósticos; aviso de emergencias (911) siempre visible; motivo de consulta y nombre/nota de las series subsecuentes solo para las dos partes y nunca en avisos de WhatsApp o correo.
 - Ubicación pública siempre aproximada; dirección exacta y contacto solo con cita confirmada.
 - Sin secretos ni contraseñas en Git, commits, logs ni documentos (tampoco la del propietario).
 - Botones, chips y campos con relleno y texto que no sale del control: `npm run test:layout` y `npm run test:a11y` deben pasar tras cambios de interfaz.

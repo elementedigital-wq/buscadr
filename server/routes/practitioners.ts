@@ -14,7 +14,7 @@ import { getPublishedConfig } from "../cms/routes";
 import { paymentOptions } from "../lib/gateways";
 import { type PractitionerRow, publicPractitioner, reputationFor } from "../lib/practitioners";
 import { getTaxonomy } from "../lib/taxonomy";
-import { feeBps } from "../lib/pricing";
+import { getPayoutSettings } from "../lib/settings";
 import { BOOKING_WINDOW_DAYS, type Interval, type Modality, type Rule, daySlots, rangeSlots } from "../lib/slots";
 import { DAY, addDays, isDate, localDate } from "../lib/time";
 
@@ -73,16 +73,16 @@ async function withCms<T extends { id: number; photo: string; headline: string }
 }
 
 export async function catalogPayload(env: Env) {
-  const [tax, pay] = await Promise.all([getTaxonomy(env.DB), paymentOptions(env)]);
+  const [tax, pay, settings] = await Promise.all([getTaxonomy(env.DB), paymentOptions(env), getPayoutSettings(env)]);
   return {
     categories: tax.categories.filter((c) => c.visible),
     specialties: tax.specialties.filter((s) => s.visible).map(({ keywords: _k, ...s }) => s),
     cities: CITIES,
     plans: PLANS,
-    fee_bps: feeBps(env),
+    fee_bps: settings.fee_bps,
     /** «sandbox» mientras ningún medio en línea mueva dinero real (avisos de «modo de prueba»). */
     payments: pay.online.some((g) => g.live) ? ("payphone" as const) : ("sandbox" as const),
-    /** Medios activos (orden del CMS): en línea al reservar y, si está activo, en el consultorio. */
+    /** Medios con tarjeta activos (orden del CMS): la cita se paga al reservar (ADR 0016). */
     gateways: pay.all.filter((g) => g.active).map((g) => ({ id: g.id, kind: g.kind, title: g.title, description: g.description })),
   };
 }

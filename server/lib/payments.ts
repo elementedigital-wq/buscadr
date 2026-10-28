@@ -85,14 +85,16 @@ export async function createPayment(
     amount_cents: number;
     fee_cents: number;
     net_cents: number;
-    /** Medio elegido; si falta, el primero activo para pagar en línea (orden del CMS). */
+    /** Medio elegido; si falta, el primero activo con tarjeta (orden del CMS). */
     gateway?: GatewayId;
+    /** Perfil de muestra: siempre el modo de prueba, aunque haya medios reales activos. */
+    demo?: boolean;
   },
 ) {
   const id = crypto.randomUUID();
   const { online } = await paymentOptions(env);
-  const chosen = (p.gateway && online.find((g) => g.id === p.gateway)) || online[0];
-  if (!chosen) throw new HttpError(409, "Por ahora no hay medios de pago en línea activos. Elige pagar en el consultorio.", "NO_ONLINE_GATEWAY");
+  const chosen = p.demo ? GATEWAY_MAP.get("sandbox") : (p.gateway && online.find((g) => g.id === p.gateway)) || online[0];
+  if (!chosen) throw new HttpError(503, "Los pagos con tarjeta no están disponibles en este momento. Inténtalo más tarde.", "NO_CARD_GATEWAY");
   const gateway = chosen.id;
   const provider = GATEWAY_MAP.get(gateway)!.provider;
   await db.batch([

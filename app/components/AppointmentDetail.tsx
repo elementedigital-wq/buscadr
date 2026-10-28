@@ -293,6 +293,14 @@ export function AppointmentDetail({ a, fresh = false, trace }: { a: AppointmentV
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                 <StatusBadge status={a.status} label={a.status_label} />
                 {a.demo && <DemoBadge />}
+                {a.followup && (
+                  <Link
+                    to={isPro ? "/panel/subsecuentes" : `/seguimientos/${a.followup.plan_id}`}
+                    className="chip bg-celeste px-2.5 py-0.5 text-xs font-semibold text-azul-ink underline-offset-2 hover:underline"
+                  >
+                    Seguimiento {a.followup.seq} de {a.followup.total}
+                  </Link>
+                )}
                 {!isPro && (
                   <Link to={`/doctor/${a.practitioner.slug}`} className="ml-1 text-sm font-semibold text-azul-ink underline-offset-2 hover:underline">
                     Ver perfil
@@ -333,7 +341,25 @@ export function AppointmentDetail({ a, fresh = false, trace }: { a: AppointmentV
           )}
           {a.cancel_reason && <p className="border-t border-tinta/5 px-5 py-3 text-sm muted">{a.cancel_reason}</p>}
         </section>
+        {a.status === "confirmada" && a.payment_status !== "pagado" && a.payment_mode === "en_linea" && a.hold_expires_ms && (
+          <Notice tone="warning" title={isPro ? "Pago pendiente del paciente" : "Paga tu cita para conservarla"}>
+            {isPro
+              ? `El paciente tiene hasta el ${dateTime(a.hold_expires_ms)} para pagar con tarjeta; si no paga, el horario se libera.`
+              : `Págala con tarjeta antes del ${dateTime(a.hold_expires_ms)}. Si no, el horario se libera.`}
+          </Notice>
+        )}
         {trace && ["confirmada", "completada", "no_asistio"].includes(a.status) && <CareTrace initial={trace} isPro={isPro} />}
+        {isPro && !a.demo && !a.followup && ["confirmada", "completada"].includes(a.status) && (
+          <section className="card flex flex-wrap items-center justify-between gap-3 p-5">
+            <div className="min-w-0">
+              <h2 className="font-bold">¿Necesita controles?</h2>
+              <p className="text-sm muted">Programa una serie de citas subsecuentes para este paciente; las acepta y paga cada una desde su cuenta.</p>
+            </div>
+            <Link to={`/panel/subsecuentes?cita=${a.id}`} className="btn-outline btn-sm">
+              <Icon name="repeat" className="size-4" /> Programar subsecuentes
+            </Link>
+          </section>
+        )}
 
         {(error || info) && <Notice tone={error ? "danger" : "success"}>{error ?? info}</Notice>}
 

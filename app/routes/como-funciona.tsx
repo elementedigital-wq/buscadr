@@ -16,17 +16,22 @@ export const meta: Route.MetaFunction = () => [
 
 const STEPS = [
   ["search", "azul", "Busca", "Por especialidad, síntoma, nombre o ciudad. Filtra por modalidad presencial o virtual y compara tarifas."],
-  ["calendar", "verde", "Elige horario", "La agenda muestra solo horarios libres del profesional. Escoges día, hora y modalidad."],
+  [
+    "calendar",
+    "verde",
+    "Elige horario y paga",
+    "La agenda muestra solo horarios libres. Escoges día, hora y modalidad, y pagas con tarjeta de crédito o débito.",
+  ],
   ["check-circle", "cielo", "El profesional confirma", "Recibe tu solicitud en su panel y por WhatsApp. Te avisamos al instante cuando la confirma."],
   ["video", "azul", "Atiéndete", "Acude al consultorio con tu código de llegada o entra a la videoconsulta desde tu cita."],
 ] as const;
 
 const CANCEL = [
-  ["Antes de que el profesional confirme", "Sin costo. Si pagaste en línea, se reembolsa completo."],
-  ["Hasta 4 horas antes de la cita", "Cancelación gratuita y reembolso íntegro del pago en línea."],
-  ["Menos de 4 horas antes", "Se puede cancelar, pero el pago en línea no se reembolsa automáticamente."],
+  ["Antes de que el profesional confirme", "Sin costo: el pago con tarjeta se reembolsa completo."],
+  ["Hasta 4 horas antes de la cita", "Cancelación gratuita y reembolso íntegro del pago con tarjeta."],
+  ["Menos de 4 horas antes", "Se puede cancelar, pero el pago no se reembolsa automáticamente."],
   ["El profesional rechaza o cancela", "Reembolso íntegro y aviso inmediato para que reserves otro horario."],
-  ["La solicitud no se confirma a tiempo", "Expira sola (24 h o 1 h antes de la cita) y se libera el pago."],
+  ["La solicitud no se confirma a tiempo", "Expira sola (24 h o 1 h antes de la cita) y se reembolsa el pago."],
 ];
 
 export default function ComoFunciona() {
@@ -59,8 +64,8 @@ export default function ComoFunciona() {
             <Icon name="clinic" className="size-5 text-azul" /> Cita presencial
           </h2>
           <p className="mt-2 text-sm muted">
-            La dirección exacta del consultorio se muestra al confirmarse la cita. En el perfil verás el sector aproximado. Paga en el consultorio o en línea,
-            según lo que acepte el profesional.
+            La dirección exacta del consultorio se muestra al confirmarse la cita. En el perfil verás el sector aproximado. Pagas con tarjeta de crédito o
+            débito al reservar; si el profesional no confirma, te devolvemos el dinero.
           </p>
         </div>
         <div className="card p-6">
@@ -68,7 +73,7 @@ export default function ComoFunciona() {
             <Icon name="video" className="size-5 text-azul" /> Cita virtual
           </h2>
           <p className="mt-2 text-sm muted">
-            Tiene su propia tarifa. Se paga en línea para asegurar el horario y la sala de video se abre 15 minutos antes, desde tu cita en buscaDR. Solo
+            Tiene su propia tarifa. Se paga con tarjeta para asegurar el horario y la sala de video se abre 15 minutos antes, desde tu cita en buscaDR. Solo
             necesitas un navegador.
           </p>
         </div>
@@ -82,8 +87,8 @@ export default function ComoFunciona() {
             no guarda los datos completos de tu tarjeta.
           </li>
           <li className="flex gap-2">
-            <Icon name="receipt" className="mt-0.5 size-4 shrink-0 text-azul" /> El paciente paga la tarifa publicada; no hay recargos ocultos. buscaDR cobra al
-            profesional una comisión de {pct(fee)} solo en citas pagadas en línea.
+            <Icon name="receipt" className="mt-0.5 size-4 shrink-0 text-azul" /> El paciente paga la tarifa publicada; no hay recargos ocultos. buscaDR cobra
+            con tarjeta, retiene una comisión de {pct(fee)} y transfiere el resto al profesional.
           </li>
           <li className="flex gap-2">
             <Icon name="repeat" className="mt-0.5 size-4 shrink-0 text-azul" /> Si el profesional rechaza o la cita expira, el reembolso es automático.
@@ -91,7 +96,7 @@ export default function ComoFunciona() {
         </ul>
         {root?.catalog.payments === "sandbox" && (
           <p className="mt-3 rounded-xl bg-amarillo/15 p-3 text-sm">
-            Durante el piloto los pagos en línea funcionan en modo de prueba: no se cobra dinero real.
+            Durante el piloto los pagos con tarjeta funcionan en modo de prueba: no se cobra dinero real.
           </p>
         )}
       </section>

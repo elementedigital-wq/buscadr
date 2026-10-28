@@ -51,6 +51,8 @@ export type ProfileData = {
   reviews: { rating: number; body: string; reply: string; created_at: string; author: string }[];
 };
 
+export type FollowupRef = { plan_id: number; seq: number; total: number };
+
 export type AppointmentSummary = {
   id: number;
   status: string;
@@ -66,6 +68,8 @@ export type AppointmentSummary = {
   hold_expires_ms: number | null;
   created_at: string;
   messages: number;
+  /** Sesión de una serie de citas subsecuentes (ADR 0017). */
+  followup: FollowupRef | null;
   demo: boolean;
   practitioner: { slug: string; name: string; specialty: string; photo: string; city: string; sector: string };
   patient?: { name: string };
@@ -93,6 +97,7 @@ export type AppointmentView = {
   completed_at: string | null;
   cancel_reason: string;
   rescheduled_from: number | null;
+  followup: FollowupRef | null;
   checkin_code: string | null;
   actions: string[];
   free_cancel_until: number;

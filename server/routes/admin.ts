@@ -6,13 +6,13 @@
 import { Hono } from "hono";
 import type { AppBindings } from "../env";
 import { type AppointmentStatus, STATUS_LABEL } from "../lib/appointments";
-import { SPECIALTY_MAP } from "../lib/catalog";
+import { getTaxonomy } from "../lib/taxonomy";
 import { track } from "../lib/events";
 import { readJson, requireAdmin } from "../lib/guards";
 import { clean, fail } from "../lib/http";
 import { notify, recipient } from "../lib/notify";
-import { PAYMENT_STATUS_LABEL, type PaymentRow } from "../lib/payments";
-import { refundPayment } from "../lib/settle";
+import { ONLINE_SQL, PAYMENT_STATUS_LABEL, type PaymentRow, collectedOnline, gatewayOf, paymentEvent } from "../lib/payments";
+import { refundPayment, settlePayment } from "../lib/settle";
 
 export const admin = new Hono<AppBindings>();
 
@@ -62,7 +62,7 @@ admin.get("/kpis", async (c) => {
               COALESCE(SUM(CASE WHEN status='aprobado' THEN fee_cents END),0) AS fees,
               SUM(CASE WHEN status='aprobado' THEN 1 ELSE 0 END) AS n,
               COALESCE(SUM(CASE WHEN status='reembolsado' THEN amount_cents END),0) AS refunded,
-              COALESCE(SUM(CASE WHEN status='aprobado' AND provider='consultorio' THEN amount_cents END),0) AS office
+              COALESCE(SUM(CASE WHEN status='aprobado' AND NOT ${ONLINE_SQL()} THEN amount_cents END),0) AS office
        FROM payments WHERE kind='cita'`,
     ),
     one<{ mrr: number; active: number }>(
@@ -84,6 +84,7 @@ admin.get("/kpis", async (c) => {
       "SELECT specialty, COUNT(*) AS n FROM practitioners WHERE status='active' AND demo=0 GROUP BY specialty ORDER BY n DESC",
     ),
   ]);
+  const tax = await getTaxonomy(db);
   return c.json({
     northStar,
     byStatus: byStatus.map((s) => ({ ...s, label: STATUS_LABEL[s.status as AppointmentStatus] ?? s.status })),
@@ -95,7 +96,7 @@ admin.get("/kpis", async (c) => {
     users: users ?? { total: 0, last30: 0, whatsapp: 0, pros: 0 },
     payments: money ?? { gross: 0, fees: 0, n: 0, refunded: 0, office: 0 },
     saas: mrr ?? { mrr: 0, active: 0 },
-    demand: demand.map((d) => ({ ...d, specialty_name: SPECIALTY_MAP.get(d.specialty)?.name ?? "" })),
+    demand: demand.map((d) => ({ ...d, specialty_name: d.specialty ? tax.nameOf(d.specialty) : "" })),
     notifications,
     funnel: {
       views: funnel?.views ?? 0,
@@ -103,7 +104,7 @@ admin.get("/kpis", async (c) => {
       completed: funnel?.completed ?? 0,
       conversion: funnel?.views ? (funnel.requests ?? 0) / funnel.views : null,
     },
-    bySpecialty: bySpecialty.map((x) => ({ ...x, name: SPECIALTY_MAP.get(x.specialty)?.name ?? x.specialty })),
+    bySpecialty: bySpecialty.map((x) => ({ ...x, name: tax.nameOf(x.specialty) })),
     notes:
       "Datos reales: excluye perfiles y citas de muestra. Ingresos de buscaDR = comisión de citas pagadas en línea + planes (MRR). Los pagos en modo sandbox no son dinero real.",
   });
@@ -121,7 +122,8 @@ admin.get("/practitioners", async (c) => {
       .bind(status)
       .all<Record<string, any>>()
   ).results;
-  return c.json({ items: rows.map((r) => ({ ...r, specialty_name: SPECIALTY_MAP.get(r.specialty)?.name ?? r.specialty })) });
+  const tax = await getTaxonomy(c.env.DB);
+  return c.json({ items: rows.map((r) => ({ ...r, specialty_name: tax.nameOf(r.specialty) })) });
 });
 
 admin.post("/practitioners/:id/review", async (c) => {
@@ -180,7 +182,7 @@ admin.get("/payments", async (c) => {
     : null;
   const rows = (
     await c.env.DB.prepare(
-      `SELECT pay.id,pay.kind,pay.plan,pay.appointment_id,pay.amount_cents,pay.fee_cents,pay.net_cents,pay.provider,pay.status,pay.method,pay.card_brand,pay.card_last4,
+      `SELECT pay.id,pay.kind,pay.plan,pay.appointment_id,pay.amount_cents,pay.fee_cents,pay.net_cents,pay.provider,pay.gateway,pay.provider_ref,pay.status,pay.method,pay.card_brand,pay.card_last4,
               pay.created_at,pay.approved_at,pay.refunded_at,u.name AS payer,trim(p.title || ' ' || p.display_name) AS practitioner
        FROM payments pay JOIN users u ON u.id=pay.payer_id LEFT JOIN practitioners p ON p.id=pay.practitioner_id
        ${status ? "WHERE pay.status=?" : "WHERE ?=?"} ORDER BY pay.created_at DESC LIMIT 300`,
@@ -199,7 +201,7 @@ admin.get("/payments", async (c) => {
         r.appointment_id,
         r.payer,
         r.practitioner,
-        r.provider,
+        gatewayOf(r as PaymentRow),
         r.status_label,
         (r.amount_cents / 100).toFixed(2),
         (r.fee_cents / 100).toFixed(2),
@@ -219,10 +221,31 @@ admin.post("/payments/:id/refund", async (c) => {
   requireAdmin(c);
   const pay = await c.env.DB.prepare("SELECT * FROM payments WHERE id=?").bind(c.req.param("id")).first<PaymentRow>();
   if (!pay) fail(404, "Pago no encontrado");
-  if (pay.status !== "aprobado" || pay.provider === "consultorio") fail(409, "Solo se reembolsan pagos en línea aprobados");
+  if (pay.status !== "aprobado" || !collectedOnline(pay)) fail(409, "Solo se reembolsan pagos cobrados por buscaDR (no los del consultorio)");
   const ok = await refundPayment(c.env, pay, clean((await readJson<{ reason?: string }>(c)).reason, 160) || "Reembolso de la administración");
   if (!ok) fail(502, "La pasarela no confirmó el reembolso. Revisa el pago en el panel del proveedor.");
   return c.json({ ok: true });
+});
+
+/** Transferencia bancaria: la administración confirma (o rechaza) al ver el dinero en la cuenta. */
+admin.post("/payments/:id/transfer", async (c) => {
+  requireAdmin(c);
+  const db = c.env.DB;
+  const pay = await db.prepare("SELECT * FROM payments WHERE id=?").bind(c.req.param("id")).first<PaymentRow>();
+  if (!pay) fail(404, "Pago no encontrado");
+  if (gatewayOf(pay) !== "transferencia" || pay.status !== "pendiente") fail(409, "Este pago no es una transferencia pendiente");
+  const b = await readJson<{ decision?: string; note?: string }>(c);
+  if (b.decision !== "approve" && b.decision !== "reject") fail(400, "Decisión inválida");
+  await paymentEvent(db, pay.id, b.decision === "approve" ? "transferencia_confirmada" : "transferencia_rechazada", { by: c.get("user")!.id }).run();
+  const status = await settlePayment(
+    c.env,
+    new URL(c.req.url).origin,
+    pay,
+    b.decision === "approve"
+      ? { approved: true, status: "aprobado", authorization: pay.provider_ref || "TRANSFERENCIA" }
+      : { approved: false, status: "rechazado", error: clean(b.note, 160) || "No encontramos la transferencia en la cuenta de buscaDR." },
+  );
+  return c.json({ ok: true, status });
 });
 
 admin.get("/appointments", async (c) => {

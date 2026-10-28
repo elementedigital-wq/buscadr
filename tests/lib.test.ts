@@ -13,6 +13,8 @@ import { priceFor } from "../server/lib/pricing";
 import { daySlots, validateRules } from "../server/lib/slots";
 import { DAY, HOUR, MINUTE, addDays, localDate, parseLocal } from "../server/lib/time";
 import { buildPayload, parseInbound, toE164Ecuador } from "../server/lib/whatsapp";
+import { decryptJson, encryptJson, maskSecret } from "../server/lib/secrets";
+import type { Env } from "../server/env";
 
 const settings = { slot_minutes: 30, buffer_minutes: 0, min_notice_hours: 0, in_person_enabled: 1, virtual_enabled: 1 };
 /** Lunes 2 de noviembre de 2026. */
@@ -162,6 +164,11 @@ describe("catálogo y WhatsApp", () => {
     expect(guessSpecialty("necesito un dentista")).toBe("odontologia");
     expect(guessSpecialty("pediatra para mi bebé")).toBe("pediatria");
     expect(guessSpecialty("xyz")).toBeNull();
+    // Taxonomía completa: términos cotidianos llevan a la especialidad correcta.
+    expect(guessSpecialty("me duelen las rodillas, creo que es fractura")).toBe("traumatologia");
+    expect(guessSpecialty("necesito brackets")).toBe("ortodoncia");
+    expect(guessSpecialty("examenes de sangre")).toBe("laboratorio");
+    expect(guessSpecialty("varices en las piernas")).toBe("cirugia-vascular");
     expect(slugify("Dra. Ana Torres")).toBe("dra-ana-torres");
   });
   it("normaliza números y arma mensajes con botones", () => {
@@ -252,5 +259,39 @@ describe("CMS", () => {
     expect(sniffFont(head("wOF2xxxx"), "woff2")).toBe(true);
     expect(sniffFont(new Uint8Array([0, 1, 0, 0, 9]), "ttf")).toBe(true);
     expect(sniffFont(head("<svg>"), "woff2")).toBe(false);
+  });
+});
+
+describe("credenciales cifradas de pasarelas", () => {
+  const env = { BUSCADR_SECRETS_KEY: "clave-de-prueba-para-cifrar-credenciales-0123456789" } as unknown as Env;
+  it("cifra con AES-GCM, descifra y rechaza textos alterados o sin clave", async () => {
+    const enc = await encryptJson(env, { token: "secreto-1234" });
+    expect(enc).toMatch(/^v1:/);
+    expect(enc).not.toContain("secreto");
+    expect(await decryptJson(env, enc)).toEqual({ token: "secreto-1234" });
+    // Dos cifrados del mismo valor son distintos (IV aleatorio).
+    expect(await encryptJson(env, { token: "secreto-1234" })).not.toBe(enc);
+    const tampered = `${enc.slice(0, -4)}AAAA`;
+    expect(await decryptJson(env, tampered)).toEqual({});
+    expect(await decryptJson({ ...env, BUSCADR_SECRETS_KEY: "otra-clave-distinta-de-32-caracteres-xx" } as Env, enc)).toEqual({});
+    expect(await decryptJson({} as Env, enc)).toEqual({});
+    await expect(encryptJson({} as Env, { token: "x" })).rejects.toThrow();
+    expect(maskSecret("abcdef1234")).toBe("••••1234");
+  });
+});
+
+describe("taxonomía en el CMS", () => {
+  it("una configuración anterior adopta una vez la visibilidad nueva y conserva nombres editados", () => {
+    const legacy = structuredClone(DEFAULT_CMS) as any;
+    delete legacy.taxonomyVersion;
+    legacy.specialties = legacy.specialties.map((s: any) => (s.slug === "psiquiatria" ? { ...s, visible: false, name: "Psiquiatría adultos" } : s));
+    const migrated = normalizeCms(legacy);
+    const psy = migrated.specialties.find((s) => s.slug === "psiquiatria")!;
+    expect(psy.visible).toBe(true);
+    expect(psy.name).toBe("Psiquiatría adultos");
+    // Ya en la v2, ocultar una especialidad se respeta.
+    const again = normalizeCms({ ...migrated, specialties: migrated.specialties.map((s) => (s.slug === "psiquiatria" ? { ...s, visible: false } : s)) });
+    expect(again.specialties.find((s) => s.slug === "psiquiatria")!.visible).toBe(false);
+    expect(SPECIALTIES.length).toBeGreaterThanOrEqual(80);
   });
 });

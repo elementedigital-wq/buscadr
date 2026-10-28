@@ -1,5 +1,25 @@
 # Cambios
 
+## 1.2.0 — 28-oct-2026 · Taxonomía médica completa y pasarelas de pago configurables
+
+### Especialidades
+- **83 especialidades en 11 categorías** (antes 16): atención primaria, mujer y niñez, clínicas, cirugía, salud mental, odontología, visión/oído/lenguaje, rehabilitación, nutrición y bienestar, diagnóstico y servicios de salud. Cada una con ícono, tono, profesional y palabras de búsqueda («brackets» → Ortodoncia, «várices» → Cirugía vascular).
+- `/especialidades` agrupada por categoría con búsqueda instantánea; los filtros de búsqueda muestran las 20 primeras y «Ver las 83».
+- Formulario del profesional con especialidades agrupadas por categoría.
+- **CMS → Especialidades y categorías:** editar, ocultar, ordenar y recategorizar; **agregar categorías y especialidades propias** que el directorio, la búsqueda, WhatsApp, las landings y los profesionales usan al publicar.
+- Corrección: la búsqueda libre ya no confunde «xyz» con Imagenología (ignora términos de 1–2 letras).
+
+### Pagos
+- **CMS → Pasarelas de pago** (como «WooCommerce → Ajustes → Pagos»): activar, ordenar y configurar cada medio con título y descripción para el paciente; sección «Próximamente» (Kushki, Datafast/Nuvei, Deuna!, PayPal).
+- Nuevo medio **Transferencia bancaria**: datos de la cuenta con botones de copiar, referencia BDR-XXXXXXXX, registro del comprobante y confirmación desde Administración → Transacciones (o rechazo con aviso al paciente).
+- El paciente **elige el medio** en el checkout. Payphone usa credenciales del CMS (cifradas) o de Cloudflare.
+- Credenciales cifradas con AES-GCM (clave `BUSCADR_SECRETS_KEY` en Cloudflare); nunca se devuelven ni se auditan sus valores. Los medios que mueven dinero real piden confirmar el Go/No-Go.
+- El calendario de reserva ofrece solo los medios activos (pago en consultorio activable/desactivable).
+- Migración aditiva `0006_pasarelas.sql` (tabla `payment_gateways` y columna `payments.gateway`).
+
+### Calidad
+- 53 pruebas (taxonomía, especialidades propias, credenciales cifradas, transferencia de punta a punta, reglas de medios al reservar). Auditorías de maquetación (8 anchos, ahora con checkout por transferencia) y de accesibilidad sin problemas.
+
 ## 1.1.0 — 28-oct-2026 · Iteración de buenas prácticas UX/UI (front end y back end)
 
 Basada en auditorías automáticas (axe-core WCAG 2.2 AA, maquetación en 8 anchos y métricas de carga) y revisión visual en móvil.

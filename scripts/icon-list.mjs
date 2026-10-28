@@ -17,6 +17,8 @@ export const GROUPS = {
     "bed-pulse", "truck-medical", "x-ray", "radiation", "hand-holding-medical", "hand-holding-heart", "hands-holding",
     "laptop-medical", "mask-face", "pump-medical", "droplet", "spa", "leaf", "seedling", "sun", "moon", "person", "person-dress",
     "venus", "mars", "venus-mars", "dumbbell", "spa", "hand-sparkles", "face-smile", "face-smile-beam", "face-meh", "face-frown",
+    "people-arrows", "ribbon", "person-dots-from-line", "hand-holding-droplet", "flask-vial", "heart-circle-bolt", "teeth", "teeth-open",
+    "wind", "shoe-prints", "circle-radiation", "user-nurse", "hospital-user", "shield-virus", "bandage", "eye-dropper", "disease",
   ],
   "Citas y agenda": [
     "calendar", "calendar-days", "calendar-check", "calendar-plus", "calendar-xmark", "calendar-week", "calendar-day", "clock",

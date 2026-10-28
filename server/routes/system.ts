@@ -6,7 +6,7 @@ import { MEDIA_KEY, getImage, mediaStorage } from "../lib/media";
 import { whatsappConfigured } from "../lib/whatsapp";
 import { mailConfigured } from "../lib/mail";
 import { ownerReady } from "../lib/owner";
-import { activeProvider, payphoneConfigured } from "../lib/payments";
+import { paymentOptions } from "../lib/gateways";
 import { catalogPayload } from "./practitioners";
 
 export const REVISION = "2026-10-28.v1.0-citas-pagos-cms";
@@ -31,8 +31,8 @@ system.get("/health", async (c) => {
       database: "d1",
       schema: "ready",
       migrations: [...applied].sort(),
-      payments: activeProvider(c.env),
-      payphone: payphoneConfigured(c.env),
+      payments: (await paymentOptions(c.env)).online.map((g) => g.id).join(",") || "ninguno",
+      payphone: (await paymentOptions(c.env)).online.some((g) => g.id === "payphone"),
       media: mediaStorage(c.env),
       whatsapp: whatsappConfigured(c.env),
       whatsappWebhook: !!(c.env.WHATSAPP_APP_SECRET && c.env.WHATSAPP_VERIFY_TOKEN),
@@ -51,7 +51,7 @@ system.get("/cms/setup", async (c) =>
   c.json({ ownerConfigured: await ownerReady(c.env.DB, c.env), recoveryEmail: mailConfigured(c.env), databaseBinding: !!c.env.DB }),
 );
 system.get("/public/config", async (c) => c.json(await getPublishedConfig(c.env.DB)));
-system.get("/catalog", (c) => c.json(catalogPayload(c.env)));
+system.get("/catalog", async (c) => c.json(await catalogPayload(c.env)));
 
 system.get("/media/:key", async (c) => {
   const key = c.req.param("key");

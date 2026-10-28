@@ -1,6 +1,7 @@
 import type { CmsConfig } from "../../server/cms/model";
 import type { City, Specialty } from "../../server/lib/catalog";
 import type { PublicPractitioner } from "../../server/lib/practitioners";
+import type { TaxCategory, TaxSpecialty } from "../../server/lib/taxonomy";
 
 export type Cms = CmsConfig;
 export type { City, PublicPractitioner, Specialty };
@@ -29,11 +30,14 @@ export type SessionUser = {
 
 export type Plan = { id: string; name: string; price_cents: number; unit: string; features: readonly string[]; monthly_appointments: number | null };
 export type Catalog = {
-  specialties: Omit<Specialty, "keywords">[];
+  categories: TaxCategory[];
+  specialties: Omit<TaxSpecialty, "keywords">[];
   cities: City[];
   plans: Plan[];
   fee_bps: number;
   payments: "sandbox" | "payphone";
+  /** Medios de pago activos en el CMS (orden del CMS). */
+  gateways: { id: string; kind: "online" | "manual" | "offline"; title: string; description: string }[];
 };
 
 export type Slot = { start_ms: number; end_ms: number; modalities: ("presencial" | "virtual")[] };

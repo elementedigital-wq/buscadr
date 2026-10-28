@@ -356,6 +356,13 @@ function Verification() {
   );
 }
 
+const GATEWAY_LABEL: Record<string, string> = {
+  sandbox: "Tarjeta (prueba)",
+  payphone: "Payphone",
+  transferencia: "Transferencia",
+  consultorio: "Consultorio",
+};
+
 type Pay = {
   id: string;
   kind: string;
@@ -365,6 +372,8 @@ type Pay = {
   fee_cents: number;
   net_cents: number;
   provider: string;
+  gateway: string;
+  provider_ref: string;
   status: string;
   status_label: string;
   card_brand: string;
@@ -378,6 +387,17 @@ function Payments() {
   const [status, setStatus] = useState("");
   const { items, error, reload } = useList<Pay>(`/api/admin/payments${status ? `?status=${status}` : ""}`);
   const [msg, setMsg] = useState<string | null>(null);
+  async function transfer(id: string, decision: "approve" | "reject") {
+    const note = decision === "reject" ? (window.prompt("Motivo para el paciente (por ejemplo: no encontramos la transferencia):") ?? "") : "";
+    if (decision === "approve" && !window.confirm("¿Confirmas que el dinero llegó a la cuenta de buscaDR? La cita quedará pagada.")) return;
+    try {
+      await api(`/api/admin/payments/${id}/transfer`, { body: { decision, note } });
+      setMsg(decision === "approve" ? "Transferencia confirmada: el pago quedó aprobado." : "Transferencia rechazada y notificada al paciente.");
+      reload();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  }
   async function refund(id: string) {
     if (!window.confirm("¿Reembolsar este pago al paciente? Esta acción se registra en el libro.")) return;
     try {
@@ -435,7 +455,10 @@ function Payments() {
                   </td>
                   <td className="p-3">{p.payer}</td>
                   <td className="p-3">
-                    {p.provider}
+                    {GATEWAY_LABEL[p.gateway || p.provider] ?? (p.gateway || p.provider)}
+                    {(p.gateway || p.provider) === "transferencia" && p.provider_ref && (
+                      <span className="block text-xs muted">Comprobante {p.provider_ref}</span>
+                    )}
                     {p.card_last4 && (
                       <span className="block text-xs muted">
                         {p.card_brand} •••• {p.card_last4}
@@ -448,7 +471,17 @@ function Payments() {
                   <td className="p-3 text-right">{money(p.amount_cents)}</td>
                   <td className="p-3 text-right">{money(p.fee_cents)}</td>
                   <td className="p-3 text-right">
-                    {p.status === "aprobado" && p.provider !== "consultorio" && (
+                    {(p.gateway || p.provider) === "transferencia" && p.status === "pendiente" && (
+                      <span className="flex flex-wrap justify-end gap-1">
+                        <button type="button" className="btn-accent btn-sm" onClick={() => transfer(p.id, "approve")}>
+                          Confirmar
+                        </button>
+                        <button type="button" className="btn-ghost btn-sm" onClick={() => transfer(p.id, "reject")}>
+                          Rechazar
+                        </button>
+                      </span>
+                    )}
+                    {p.status === "aprobado" && (p.gateway || p.provider) !== "consultorio" && (
                       <button type="button" className="btn-ghost btn-sm" onClick={() => refund(p.id)}>
                         Reembolsar
                       </button>

@@ -1,6 +1,6 @@
 /** Esquema de contenido del CMS Maestro de buscaDR. Nunca acepta HTML, CSS ni scripts en datos editables. */
 import { isIconName } from "../../app/lib/icons";
-import { SPECIALTIES, TONES } from "../lib/catalog";
+import { CATEGORIES, SPECIALTIES, TONES, type Tone } from "../lib/catalog";
 
 /** Tipografías incluidas en el sitio (Brand Deck, lámina 09: Manrope para titulares, Inter para la interfaz). */
 export const BUILTIN_FONTS = ["Manrope", "Inter"] as const;
@@ -34,6 +34,11 @@ export const FONT_URL = /^\/api\/media\/[0-9a-f-]{36}\.(?:woff2|woff|ttf|otf)$/;
 export const ROUTES = ["inicio", "buscar", "especialidades", "citas", "panel", "planes", "para-profesionales", "como-funciona", "cuenta"] as const;
 /** Nombre de ícono de Font Awesome: «stethoscope», «regular:heart», «brands:whatsapp». */
 export const ICON_NAME = /^(?:(?:regular|brands):)?[a-z0-9]+(?:-[a-z0-9]+){0,6}$/;
+/** Slug de categoría o especialidad propia: «medicina-hiperbarica». Nunca cambia una vez creada. */
+export const TAXONOMY_VERSION = 2;
+export const TAXON_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+){0,6}$/;
+export const MAX_CUSTOM_SPECIALTIES = 120;
+export const MAX_CUSTOM_CATEGORIES = 30;
 const SVG_PATH = /^[MmLlHhVvCcSsQqTtAaZz0-9.,\s-]+$/;
 
 /** HEX oficiales del Brand Deck buscaDR (lámina 08: Sistema de color). */
@@ -135,13 +140,22 @@ export const DEFAULT_CMS = {
     showWhatsapp: true,
     showPlans: true,
   },
+  /** Versión de la taxonomía: las configuraciones anteriores a la v2 (16 especialidades) adoptan una vez la visibilidad y el orden nuevos. */
+  taxonomyVersion: TAXONOMY_VERSION,
+  /** Categorías que agrupan especialidades (base + propias del CMS). */
+  categories: CATEGORIES.map((c, order) => ({ slug: c.slug, name: c.name, icon: c.icon, tone: c.tone as Tone, visible: true, order, custom: false })),
+  /** Especialidades base (editables) y propias agregadas en el CMS (`custom: true`). */
   specialties: SPECIALTIES.map((s, order) => ({
     slug: s.slug,
     name: s.name,
+    professional: s.professional,
+    category: s.category,
     icon: s.icon,
-    tone: s.tone as (typeof TONES)[number],
+    tone: s.tone as Tone,
+    keywords: s.keywords.join(" "),
     visible: s.enabled,
-    order: s.enabled ? order : 50 + order,
+    order,
+    custom: false,
   })),
   buttons: {
     primary: "Ver perfil",
@@ -338,7 +352,10 @@ export function normalizeCms(input: any) {
     showWhatsapp: bool(l.showWhatsapp, d.layout.showWhatsapp),
     showPlans: bool(l.showPlans, d.layout.showPlans),
   };
-  const specSlugs = new Set(SPECIALTIES.map((x) => x.slug));
+  const specSlugs = new Set([
+    ...SPECIALTIES.map((x) => x.slug),
+    ...(Array.isArray(input.specialties) ? input.specialties : []).filter((x: any) => x?.custom === true).map((x: any) => String(x?.slug)),
+  ]);
   const banners: Banner[] = Array.isArray(input.banners)
     ? input.banners.slice(0, 12).map((it: any, i: number) => ({
         id: txt(it?.id || `banner-${i}`, 50).replace(/[^a-zA-Z0-9_-]/g, "") || `banner-${i}`,
@@ -351,20 +368,96 @@ export function normalizeCms(input: any) {
         visible: !!it?.visible,
       }))
     : d.banners;
+  // Categorías: las base se editan (nombre, ícono, tono, orden, visibilidad); las propias se agregan.
+  const inCats: any[] = Array.isArray(input.categories) ? input.categories : [];
+  const baseCats = d.categories.map((base) => {
+    const edit = inCats.find((x) => x?.slug === base.slug) ?? {};
+    return {
+      slug: base.slug,
+      name: txt(edit.name ?? base.name, 60) || base.name,
+      icon: iconValue(edit.icon, base.icon),
+      tone: pick(edit.tone, TONES, base.tone),
+      visible: bool(edit.visible, true),
+      order: nrange(edit.order, 0, 199, base.order),
+      custom: false,
+    };
+  });
+  const catSlugs = new Set(baseCats.map((c) => c.slug));
+  const customCats = inCats
+    .filter((x) => x?.custom === true && TAXON_SLUG.test(String(x.slug)) && !catSlugs.has(String(x.slug)))
+    .slice(0, MAX_CUSTOM_CATEGORIES)
+    .flatMap((x) => {
+      const name = txt(x.name, 60);
+      if (!name || catSlugs.has(x.slug)) return [];
+      catSlugs.add(x.slug);
+      return [
+        {
+          slug: String(x.slug),
+          name,
+          icon: iconValue(x.icon, "kit-medical"),
+          tone: pick(x.tone, TONES, "azul"),
+          visible: bool(x.visible, true),
+          order: nrange(x.order, 0, 199, 100),
+          custom: true,
+        },
+      ];
+    });
+  const categories = [...baseCats, ...customCats].sort((x, y) => x.order - y.order);
+  const categoryOf = (x: unknown, fallback: string) => (catSlugs.has(String(x)) ? String(x) : fallback);
+
+  // Especialidades: base editables + propias (slug estable, sin chocar con las base).
   const incoming: any[] = Array.isArray(input.specialties) ? input.specialties : [];
-  const specialties = d.specialties
-    .map((base) => {
-      const edit = incoming.find((x) => x?.slug === base.slug) ?? {};
-      return {
-        slug: base.slug,
-        name: txt(edit.name ?? base.name, 55),
-        icon: iconValue(edit.icon, base.icon),
-        tone: pick(edit.tone, TONES, base.tone),
-        visible: bool(edit.visible, base.visible),
-        order: nrange(edit.order, 0, 99, base.order),
-      };
-    })
-    .sort((x, y) => x.order - y.order);
+  const keywordsOf = (x: unknown, fallback: string) =>
+    txt(x ?? fallback, 300)
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9ñ ]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  // Configuración anterior a la taxonomía completa: conserva nombres, íconos y tonos editados, pero
+  // toma la visibilidad y el orden nuevos (antes había especialidades ocultas por defecto).
+  const legacyTaxonomy = input.taxonomyVersion !== TAXONOMY_VERSION;
+  const baseSpecs = d.specialties.map((base) => {
+    const found = incoming.find((x) => x?.slug === base.slug) ?? {};
+    const edit = legacyTaxonomy ? { ...found, visible: undefined, order: undefined, category: undefined } : found;
+    return {
+      slug: base.slug,
+      name: txt(edit.name ?? base.name, 55) || base.name,
+      professional: txt(edit.professional ?? base.professional, 60) || base.professional,
+      category: categoryOf(edit.category, base.category),
+      icon: iconValue(edit.icon, base.icon),
+      tone: pick(edit.tone, TONES, base.tone),
+      keywords: keywordsOf(edit.keywords, base.keywords),
+      visible: bool(edit.visible, base.visible),
+      order: nrange(edit.order, 0, 299, base.order),
+      custom: false,
+    };
+  });
+  const specSlugSet = new Set(baseSpecs.map((x) => x.slug));
+  const customSpecs = incoming
+    .filter((x) => x?.custom === true && TAXON_SLUG.test(String(x.slug)) && !specSlugSet.has(String(x.slug)))
+    .slice(0, MAX_CUSTOM_SPECIALTIES)
+    .flatMap((x) => {
+      const name = txt(x.name, 55);
+      if (!name || specSlugSet.has(x.slug)) return [];
+      specSlugSet.add(x.slug);
+      return [
+        {
+          slug: String(x.slug),
+          name,
+          professional: txt(x.professional, 60) || name,
+          category: categoryOf(x.category, "servicios-de-salud"),
+          icon: iconValue(x.icon, "stethoscope"),
+          tone: pick(x.tone, TONES, "azul"),
+          keywords: keywordsOf(x.keywords, ""),
+          visible: bool(x.visible, true),
+          order: nrange(x.order, 0, 299, 200),
+          custom: true,
+        },
+      ];
+    });
+  const specialties = [...baseSpecs, ...customSpecs].sort((x, y) => x.order - y.order);
   const buttons = {
     primary: txt(b.primary ?? d.buttons.primary, 75),
     book: txt(b.book ?? d.buttons.book, 75),
@@ -422,6 +515,8 @@ export function normalizeCms(input: any) {
     banners,
     copy,
     layout,
+    taxonomyVersion: TAXONOMY_VERSION,
+    categories,
     specialties,
     buttons,
     navigation,

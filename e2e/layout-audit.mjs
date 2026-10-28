@@ -197,6 +197,12 @@ async function setupAccounts() {
     if (admin.email && admin.password && proId) {
       await call("POST", "/api/auth/login", admin);
       await call("POST", `/api/admin/practitioners/${proId}/review`, { decision: "approve" });
+      // Transferencia bancaria activa: el checkout muestra la lista de medios y los datos para transferir.
+      await call("PUT", "/api/cms/payments/transferencia", {
+        settings: { bank: "Banco Pichincha", account_type: "Ahorros", account_number: "2201234567", holder: "buscaDR Servicios de Salud S.A.S.", id_number: "0999999999001" },
+        enabled: true,
+        confirm_live: true,
+      });
       await call("POST", "/api/auth/logout");
     }
     // Paciente con una cita presencial (perfil de muestra: se confirma sola) y una virtual con pago pendiente.
@@ -205,13 +211,16 @@ async function setupAccounts() {
     const a = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(2, 10), modality: "presencial", idempotency_key: key(), reason: "Control general y revisión de exámenes de laboratorio recientes." });
     if (a.id) await call("POST", `/api/appointments/${a.id}/messages`, { body: "Hola doctor, ¿debo llevar los exámenes impresos o basta con el PDF en el celular?" });
     const v = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
+    const t = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(4, 17), modality: "virtual", idempotency_key: key() });
+    const transferCheckout = t.checkout?.startsWith("/pagar/") ? t.checkout : null;
+    if (transferCheckout && admin.email) await call("POST", `/api/payments/${transferCheckout.split("/").pop()}/method`, { gateway: "transferencia" });
     await call("PUT", "/api/me/favorites/4");
     let proAppointment = null;
     if (admin.email && proId) {
       proAppointment = (await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(2, 11), modality: "presencial", idempotency_key: key(), reason: "Control de niño sano" })).id;
       await call("POST", "/api/appointments", { practitioner_id: proId, start: weekday(3, 9), modality: "presencial", idempotency_key: key() });
     }
-    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout, proAppointment };
+    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout, transferCheckout, proAppointment };
   }, [stamp, { email: process.env.ADMIN_EMAIL ?? "", password: process.env.ADMIN_PASSWORD ?? "" }]);
   await ctx.close();
   return out;
@@ -225,6 +234,7 @@ try {
     ...(acc.appointment ? [`/citas/${acc.appointment}`] : []),
     ...(acc.virtual ? [`/citas/${acc.virtual}`] : []),
     ...(acc.checkout?.startsWith("/") ? [acc.checkout] : []),
+    ...(acc.transferCheckout ? [acc.transferCheckout] : []),
   ]);
   await run("profesional", login(acc.pro, "contrasena-prueba-123"), [...PRO, ...(acc.proAppointment ? [`/panel/citas/${acc.proAppointment}`] : [])]);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) await run("propietario", login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD), ["/maestro", "/admin"]);

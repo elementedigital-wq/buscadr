@@ -16,14 +16,16 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - `wrangler.jsonc` = despliegue; `wrangler.app.jsonc` = desarrollo (Vite). Mismos bindings; `scripts/check-wrangler.mjs` lo verifica.
 - D1 `DB` (`buscadr-db`). Migraciones en `migrations/`, aditivas, ≤ 45 sentencias, aplicadas solas en el primer request.
 - R2 `MEDIA` opcional (sin R2 las imágenes y fuentes van a D1).
-- Secretos solo en Cloudflare: `BUSCADR_ADMIN_PASSWORD` (contraseña inicial del propietario), `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID`.
+- Secretos solo en Cloudflare: `BUSCADR_ADMIN_PASSWORD` (contraseña inicial del propietario), `BUSCADR_SECRETS_KEY` (clave para cifrar en D1 las credenciales de pasarelas cargadas en el CMS, ADR 0013), `RESEND_API_KEY`, `GOOGLE_CLIENT_ID`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_ID`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`, `PAYPHONE_TOKEN`, `PAYPHONE_STORE_ID`.
+- Taxonomía: 83 especialidades base en 11 categorías (`server/lib/taxonomy-data.ts`, slugs permanentes) + propias del CMS; usar siempre `getTaxonomy()` en el servidor (ADR 0014).
+- Pagos: medios configurables en CMS → Pasarelas de pago (`server/lib/gateways.ts`); `payments.gateway` identifica el medio (ADR 0013).
 - Propietario del CMS: `elemente.digital@gmail.com` (`server/lib/owner.ts`, ADR 0008). Solo esa cuenta ve y usa `/maestro` y `/admin` (`cms: true` en `/api/auth/me`).
 - Comandos: `npm run dev`, `npm test`, `npm run check`, `npm run test:e2e`, `npm run test:layout` (sin desbordes ni texto aplastado en 320–1440 px), `npm run test:a11y` (axe, WCAG 2.2 AA), `npm run icons`.
 
 ## Reglas no negociables
 - Preservar cuentas, sesiones (`__Host-buscadr_session`), citas, pagos y datos D1. Nunca `DROP`, `DELETE` masivo, renombrar ni cambiar tipos en migraciones.
 - `npm run check` completo antes de cada push a `main`.
-- Pagos: buscaDR Pay en `sandbox` hasta el Go/No-Go del Documento Maestro. Nunca guardar número completo de tarjeta ni CVV. Cada cobro queda en `payments` + `payment_events`.
+- Pagos: solo el medio de prueba activo hasta el Go/No-Go del Documento Maestro. Nunca guardar número completo de tarjeta ni CVV. Cada cobro queda en `payments` + `payment_events`. Credenciales de pasarelas solo cifradas (nunca en claro en D1, respuestas, logs ni auditoría).
 - Distinguir siempre perfiles de muestra, piloto y funciones reales. Nunca presentar opiniones, registros profesionales, «Verificado» o cifras ficticias como reales.
 - Salud: sin promesas clínicas ni diagnósticos; aviso de emergencias (911) siempre visible; motivo de consulta solo para las dos partes y nunca en avisos de WhatsApp o correo.
 - Ubicación pública siempre aproximada; dirección exacta y contacto solo con cita confirmada.

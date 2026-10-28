@@ -33,7 +33,8 @@ import { handoverCode } from "../lib/crypto";
 import { track } from "../lib/events";
 import { isAdmin, readJson, requireUser } from "../lib/guards";
 import { clean, fail } from "../lib/http";
-import { type PaymentRow, createPayment, nowText, startCheckout } from "../lib/payments";
+import { isGatewayId, paymentOptions } from "../lib/gateways";
+import { ONLINE_SQL, type PaymentRow, createPayment, holdForTransfer, nowText, startCheckout } from "../lib/payments";
 import { type PractitionerRow, fullName, patientShortName } from "../lib/practitioners";
 import { feeBps, priceFor } from "../lib/pricing";
 import { RULES, hit } from "../lib/rate-limit";
@@ -192,6 +193,7 @@ appointments.post("/", async (c) => {
     start?: string | number;
     modality?: string;
     payment_mode?: string;
+    gateway?: string;
     reason?: string;
     patient_name?: string;
     idempotency_key?: string;
@@ -218,7 +220,13 @@ appointments.post("/", async (c) => {
   const reason = clean(b.reason, 160);
   const prepay = modality === "virtual" ? !!p.prepay_virtual : !!p.prepay_in_person;
   const basePrice = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
-  const online = basePrice > 0 && (prepay || b.payment_mode === "en_linea");
+  // Medios de pago activos en el CMS (ADR 0013): sin medios en línea se paga en el consultorio; con el
+  // pago en consultorio desactivado, se paga en línea al reservar.
+  const options = await paymentOptions(c.env);
+  let online = basePrice > 0 && (prepay || b.payment_mode === "en_linea");
+  if (online && !options.online.length) online = false;
+  if (!online && basePrice > 0 && !options.office && options.online.length) online = true;
+  const gateway = isGatewayId(b.gateway) && options.online.some((g) => g.id === b.gateway) ? b.gateway : undefined;
   const price = priceFor(p, modality, online, feeBps(c.env));
   const instant = !!p.auto_confirm || !!p.demo;
   // Con pago previo, el horario se retiene 30 min mientras se paga; luego espera la confirmación.
@@ -262,7 +270,9 @@ appointments.post("/", async (c) => {
       amount_cents: price.price_cents,
       fee_cents: price.fee_cents,
       net_cents: price.net_cents,
+      gateway,
     });
+    if (pay.gateway === "transferencia") await holdForTransfer(db, id, start);
     const row = await db.prepare("SELECT * FROM payments WHERE id=?").bind(pay.id).first<PaymentRow>();
     checkout = (await startCheckout(c.env, row!, origin(c), `Cita ${modality} #${id} · ${fullName(p)}`))?.url ?? `/pagar/${pay.id}`;
   } else {
@@ -476,7 +486,7 @@ async function transition(db: D1Database, a: AppointmentRow, to: AppointmentStat
 
 const approvedPayment = (db: D1Database, appointmentId: number) =>
   db
-    .prepare("SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND provider<>'consultorio' ORDER BY approved_at DESC LIMIT 1")
+    .prepare(`SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND ${ONLINE_SQL()} ORDER BY approved_at DESC LIMIT 1`)
     .bind(appointmentId)
     .first<PaymentRow>();
 
@@ -588,7 +598,7 @@ appointments.post("/:id/actions/:action", async (c) => {
       await db.batch([
         db
           .prepare(
-            "INSERT INTO payments(id,kind,appointment_id,payer_id,practitioner_id,amount_cents,fee_cents,net_cents,provider,status,method,approved_at) VALUES(?,?,?,?,?,?,0,?,'consultorio','aprobado',?,?)",
+            "INSERT INTO payments(id,kind,appointment_id,payer_id,practitioner_id,amount_cents,fee_cents,net_cents,provider,gateway,status,method,approved_at) VALUES(?,?,?,?,?,?,0,?,'consultorio','consultorio','aprobado',?,?)",
           )
           .bind(
             id,

@@ -9,6 +9,7 @@ import { type ApiError, api } from "../lib/api";
 import { addDays, dayParts, money, timeOf, toLocalDate } from "../lib/format";
 import type { PublicPractitioner, Slot } from "../lib/types";
 import { Icon } from "./Icon";
+import { useRootData } from "../root";
 import { Notice, Spinner } from "./ui";
 
 type Day = { date: string; slots: Slot[] };
@@ -21,6 +22,7 @@ const groupOf = (ms: number) => {
 
 export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p: PublicPractitioner; loggedIn: boolean; bookLabel?: string }) {
   const navigate = useNavigate();
+  const root = useRootData();
   const today = toLocalDate(Date.now());
   const [params] = useSearchParams();
   // Horario elegido antes de iniciar sesión (vuelve en la URL: ?modalidad=…&hora=…): se restaura.
@@ -47,7 +49,16 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
 
   const price = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
   const prepay = modality === "virtual" ? p.prepay_virtual : p.prepay_in_person;
-  const online = price > 0 && (prepay || payOnline);
+  // Medios activos en el CMS (mismas reglas que el servidor): sin medios en línea se paga en el
+  // consultorio; sin pago en consultorio, en línea.
+  const gateways = root?.catalog.gateways ?? [];
+  const onlineMethods = gateways.filter((g) => g.kind !== "offline");
+  const onlineOk = onlineMethods.length > 0;
+  const officeOk = gateways.some((g) => g.id === "consultorio");
+  const mustOnline = price > 0 && onlineOk && (prepay || !officeOk);
+  const canChoose = price > 0 && onlineOk && officeOk && !prepay;
+  const online = price > 0 && (mustOnline || (canChoose && payOnline));
+  const onlineHint = onlineMethods.map((g) => g.title).join(" · ") || "buscaDR Pay";
 
   useEffect(() => {
     let cancelled = false;
@@ -218,13 +229,13 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
         )}
       </div>
 
-      {price > 0 && !prepay && (
+      {canChoose && (
         <fieldset className="mt-2">
           <legend className="text-sm font-semibold">¿Cómo quieres pagar?</legend>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {[
               [false, "En el consultorio", "Pagas el día de la cita"],
-              [true, "En línea ahora", "Con tarjeta en buscaDR Pay"],
+              [true, "En línea ahora", onlineHint],
             ].map(([v, title, hint]) => (
               <label
                 key={String(v)}
@@ -246,11 +257,21 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
           </div>
         </fieldset>
       )}
-      {prepay && price > 0 && (
+      {mustOnline && (
         <p className="mt-2 flex items-start gap-2 rounded-2xl bg-celeste/60 p-3 text-xs">
           <Icon name="card" className="mt-0.5 size-4 text-azul" />
-          Las citas {modality === "virtual" ? "virtuales" : "presenciales"} de este profesional se pagan en línea al reservar. Si el profesional no la confirma,
-          te devolvemos el dinero.
+          <span>
+            {prepay
+              ? `Las citas ${modality === "virtual" ? "virtuales" : "presenciales"} de este profesional se pagan en línea al reservar.`
+              : "La cita se paga en línea al reservar."}{" "}
+            Medios: {onlineHint}. Si el profesional no la confirma, te devolvemos el dinero.
+          </span>
+        </p>
+      )}
+      {price > 0 && !onlineOk && (
+        <p className="mt-2 flex items-start gap-2 rounded-2xl bg-fondo p-3 text-xs">
+          <Icon name="clinic" className="mt-0.5 size-4 text-azul" />
+          Pagas {money(price)} directamente en el consultorio el día de la cita.
         </p>
       )}
 

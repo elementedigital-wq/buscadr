@@ -13,7 +13,15 @@ export async function loader({ request, context }: Route.LoaderArgs) {
     serverApiSafe<{ user: SessionUser | null }>(context, request, "/api/auth/me", { user: null }),
     serverApiSafe<{ config: Cms | null }>(context, request, "/api/public/config", { config: null }),
     serverApiSafe<{ enabled: boolean; clientId: string | null }>(context, request, "/api/auth/google/config", { enabled: false, clientId: null }),
-    serverApiSafe<Catalog>(context, request, "/api/catalog", { specialties: [], cities: [], plans: [], fee_bps: 800, payments: "sandbox" }),
+    serverApiSafe<Catalog>(context, request, "/api/catalog", {
+      categories: [],
+      specialties: [],
+      cities: [],
+      plans: [],
+      fee_bps: 800,
+      payments: "sandbox",
+      gateways: [],
+    }),
   ]);
   return { user: me.user, cms: config.config, google, catalog, origin: new URL(request.url).origin };
 }

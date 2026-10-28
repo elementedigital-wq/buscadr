@@ -11,7 +11,19 @@ import type { AppBindings } from "../env";
 import { PLAN_MAP } from "../lib/catalog";
 import { isAdmin, readJson, requireUser } from "../lib/guards";
 import { fail } from "../lib/http";
-import { PAYMENT_STATUS_LABEL, type PaymentRow, clientTxIdOf, confirmPayphone, paymentEvent, sandboxDecision, startCheckout } from "../lib/payments";
+import { GATEWAY_MAP, isGatewayId, paymentOptions, publicGateway } from "../lib/gateways";
+import { notify, recipient } from "../lib/notify";
+import {
+  PAYMENT_STATUS_LABEL,
+  type PaymentRow,
+  clientTxIdOf,
+  confirmPayphone,
+  gatewayOf,
+  holdForTransfer,
+  paymentEvent,
+  sandboxDecision,
+  startCheckout,
+} from "../lib/payments";
 import { RULES, hit } from "../lib/rate-limit";
 import { settlePayment } from "../lib/settle";
 import { formatLong } from "../lib/time";
@@ -19,6 +31,9 @@ import { formatLong } from "../lib/time";
 export const payments = new Hono<AppBindings>();
 
 const ID = /^[0-9a-f-]{36}$/;
+/** Referencia corta para el concepto de la transferencia («BDR-1A2B3C4D»). */
+export const transferReference = (id: string) => `BDR-${id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
+const OPEN = ["creado", "pendiente", "rechazado"];
 
 async function loadPayment(db: D1Database, id: string) {
   if (!ID.test(id)) fail(404, "Pago no encontrado");
@@ -66,6 +81,10 @@ payments.get("/:id", async (c) => {
       amount_cents: pay.amount_cents,
       currency: pay.currency,
       provider: pay.provider,
+      gateway: gatewayOf(pay),
+      gateway_title: (await paymentOptions(c.env)).all.find((g) => g.id === gatewayOf(pay))?.title ?? "",
+      reference: transferReference(pay.id),
+      receipt: gatewayOf(pay) === "transferencia" ? pay.provider_ref : "",
       status: pay.status,
       status_label: PAYMENT_STATUS_LABEL[pay.status],
       card_brand: pay.card_brand,
@@ -77,6 +96,8 @@ payments.get("/:id", async (c) => {
       description: appt ? `Cita ${appt.modality} con ${appt.name}` : `Plan ${PLAN_MAP.get(pay.plan ?? "")?.name ?? ""} · 30 días`,
       appointment: appt && { ...appt, when: formatLong(appt.start_ms), demo: !!appt.demo },
     },
+    // Medios para elegir en el checkout (orden y textos del CMS) y la cuenta para transferir.
+    methods: (await paymentOptions(c.env)).online.map(publicGateway),
   });
 });
 
@@ -85,7 +106,7 @@ payments.post("/:id/checkout", async (c) => {
   const user = requireUser(c);
   const pay = await loadPayment(c.env.DB, c.req.param("id"));
   if (pay.payer_id !== user.id) fail(404, "Pago no encontrado");
-  if (!["creado", "pendiente", "rechazado"].includes(pay.status)) fail(409, "Este pago ya no admite cambios");
+  if (!OPEN.includes(pay.status)) fail(409, "Este pago ya no admite cambios");
   const res = await startCheckout(
     c.env,
     pay,
@@ -96,6 +117,72 @@ payments.post("/:id/checkout", async (c) => {
   return c.json({ url: res.url });
 });
 
+/**
+ * Cambia el medio de pago antes de pagar (como elegir método en el checkout de WooCommerce). Solo
+ * medios activos en el CMS. Transferencia: queda «pendiente» y el horario se retiene más tiempo.
+ */
+payments.post("/:id/method", async (c) => {
+  const user = requireUser(c);
+  const db = c.env.DB;
+  const pay = await loadPayment(db, c.req.param("id"));
+  if (pay.payer_id !== user.id) fail(404, "Pago no encontrado");
+  if (!OPEN.includes(pay.status)) fail(409, "Este pago ya no admite cambios");
+  const wanted = (await readJson<{ gateway?: string }>(c)).gateway;
+  const { online } = await paymentOptions(c.env);
+  if (!isGatewayId(wanted) || !online.some((g) => g.id === wanted)) fail(400, "Ese medio de pago no está disponible");
+  if (wanted !== gatewayOf(pay)) {
+    const provider = GATEWAY_MAP.get(wanted)!.provider;
+    const status = wanted === "transferencia" ? "pendiente" : "creado";
+    await db.batch([
+      db
+        .prepare(
+          "UPDATE payments SET gateway=?,provider=?,status=?,provider_ref='',error='',updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('creado','pendiente','rechazado')",
+        )
+        .bind(wanted, provider, status, pay.id),
+      paymentEvent(db, pay.id, "medio_elegido", { gateway: wanted }),
+    ]);
+    if (wanted === "transferencia" && pay.appointment_id) {
+      const a = await db.prepare("SELECT start_ms FROM appointments WHERE id=?").bind(pay.appointment_id).first<{ start_ms: number }>();
+      if (a) await holdForTransfer(db, pay.appointment_id, a.start_ms);
+    }
+  }
+  return c.json({ ok: true, gateway: wanted });
+});
+
+/** El paciente registra el número de comprobante de su transferencia; la administración lo confirma. */
+payments.post("/:id/transfer", async (c) => {
+  const user = requireUser(c);
+  const db = c.env.DB;
+  await hit(db, `pay:${user.id}`, RULES.payment);
+  const pay = await loadPayment(db, c.req.param("id"));
+  if (pay.payer_id !== user.id) fail(404, "Pago no encontrado");
+  if (gatewayOf(pay) !== "transferencia" || pay.status !== "pendiente") fail(409, "Este pago no espera una transferencia");
+  const receipt = String((await readJson<{ receipt?: string }>(c)).receipt ?? "")
+    .replace(/[^\w .#/-]/g, "")
+    .trim()
+    .slice(0, 40);
+  if (receipt.length < 4) fail(400, "Escribe el número de comprobante (mínimo 4 caracteres)");
+  await db.batch([
+    db.prepare("UPDATE payments SET provider_ref=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(receipt, pay.id),
+    paymentEvent(db, pay.id, "transferencia_reportada", { receipt }),
+  ]);
+  // Aviso al propietario (administración) para revisar la cuenta bancaria y confirmar.
+  const owner = await db.prepare("SELECT id FROM users WHERE staff_role='admin' LIMIT 1").first<{ id: string }>();
+  const to = owner ? await recipient(db, owner.id) : null;
+  if (to)
+    c.executionCtx.waitUntil(
+      notify(c.env, to, {
+        kind: "transferencia_reportada",
+        title: "Transferencia por confirmar",
+        body: `${transferReference(pay.id)} · $${(pay.amount_cents / 100).toFixed(2)} · comprobante ${receipt}`,
+        link: "/admin",
+        appOnly: true,
+        origin: new URL(c.req.url).origin,
+      }),
+    );
+  return c.json({ ok: true, receipt });
+});
+
 /** Modo sandbox: tarjetas de prueba (4111 1111 1111 1111 aprueba; terminadas en 0002 se rechazan). */
 payments.post("/:id/sandbox", async (c) => {
   const user = requireUser(c);
@@ -103,7 +190,8 @@ payments.post("/:id/sandbox", async (c) => {
   await hit(db, `pay:${user.id}`, RULES.payment);
   const pay = await loadPayment(db, c.req.param("id"));
   if (pay.payer_id !== user.id) fail(404, "Pago no encontrado");
-  if (pay.provider !== "sandbox") fail(409, "Este pago se procesa con la pasarela real");
+  if (gatewayOf(pay) !== "sandbox") fail(409, "Este pago se procesa con otro medio de pago");
+  if (!(await paymentOptions(c.env)).online.some((g) => g.id === "sandbox")) fail(409, "El pago de prueba está desactivado. Elige otro medio de pago.");
   if (pay.status === "aprobado") return c.json({ status: "aprobado" });
   if (!["creado", "pendiente", "rechazado"].includes(pay.status)) fail(409, "Este pago ya no admite cambios");
   const b = await readJson<{ number?: string; exp?: string; cvv?: string; name?: string }>(c);
@@ -131,7 +219,7 @@ payments.post("/payphone/confirm", async (c) => {
   const clientTx = String(b.clientTransactionId ?? "");
   if (!/^[0-9a-f]{32}$/.test(clientTx)) fail(400, "Referencia de pago inválida");
   const pay = await db.prepare("SELECT * FROM payments WHERE replace(id,'-','')=?").bind(clientTx).first<PaymentRow>();
-  if (!pay || pay.payer_id !== user.id || pay.provider !== "payphone" || clientTxIdOf(pay.id) !== clientTx) fail(404, "Pago no encontrado");
+  if (!pay || pay.payer_id !== user.id || gatewayOf(pay) !== "payphone" || clientTxIdOf(pay.id) !== clientTx) fail(404, "Pago no encontrado");
   if (pay.status === "aprobado" || pay.status === "reembolsado") return c.json({ id: pay.id, status: pay.status });
   const result = await confirmPayphone(c.env, pay, String(b.id ?? ""));
   await paymentEvent(db, pay.id, "payphone_confirmacion", { status: result.status }).run();

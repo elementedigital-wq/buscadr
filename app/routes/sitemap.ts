@@ -1,4 +1,5 @@
-import { CITIES, SPECIALTIES } from "../../server/lib/catalog";
+import { CITIES } from "../../server/lib/catalog";
+import { getTaxonomy } from "../../server/lib/taxonomy";
 import { cloudflareContext } from "../lib/context";
 import type { Route } from "./+types/sitemap";
 
@@ -14,12 +15,13 @@ export async function loader({ request, context }: Route.LoaderArgs) {
       updated_at: string;
     }>()
   ).results;
+  const tax = await getTaxonomy(env.DB);
   const urls = new Map<string, string | undefined>(
     ["/", "/buscar", "/especialidades", "/como-funciona", "/para-profesionales", "/planes", "/privacidad"].map((p) => [`${origin}${p}`, undefined]),
   );
   for (const r of rows) {
     const city = CITIES.find((c) => c.name === r.city);
-    if (city && SPECIALTIES.some((s) => s.slug === r.specialty && s.enabled)) urls.set(`${origin}/medicos/${city.slug}/${r.specialty}`, undefined);
+    if (city && tax.map.get(r.specialty)?.visible) urls.set(`${origin}/medicos/${city.slug}/${r.specialty}`, undefined);
     urls.set(`${origin}/doctor/${r.slug}`, r.updated_at?.slice(0, 10));
   }
   const body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${[...urls]

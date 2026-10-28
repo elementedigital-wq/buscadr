@@ -14,6 +14,7 @@ export type TabId =
   | "biblioteca"
   | "seo"
   | "permisos"
+  | "pagos"
   | "resenas"
   | "historial"
   | "acceso";
@@ -25,11 +26,12 @@ export const TABS: { id: TabId; label: string; icon: string; group: "Contenido" 
   { id: "banners", label: "Banners", icon: "list", group: "Contenido" },
   { id: "textos", label: "Textos y botones", icon: "font", group: "Contenido" },
   { id: "componentes", label: "Componentes", icon: "chart", group: "Contenido" },
-  { id: "especialidades", label: "Especialidades e íconos", icon: "stethoscope", group: "Contenido" },
+  { id: "especialidades", label: "Especialidades y categorías", icon: "stethoscope", group: "Contenido" },
   { id: "profesionales", label: "Profesionales", icon: "user-doctor", group: "Contenido" },
   { id: "biblioteca", label: "Biblioteca de medios", icon: "regular:images", group: "Contenido" },
   { id: "seo", label: "SEO y redes", icon: "search", group: "Contenido" },
   { id: "permisos", label: "Permisos", icon: "shield", group: "Operación" },
+  { id: "pagos", label: "Pasarelas de pago", icon: "card", group: "Operación" },
   { id: "resenas", label: "Opiniones", icon: "star", group: "Operación" },
   { id: "historial", label: "Publicaciones", icon: "repeat", group: "Operación" },
   { id: "acceso", label: "Acceso y contraseña", icon: "lock", group: "Operación" },
@@ -43,7 +45,7 @@ export function tabForPath(path: string): TabId {
   if (root === "banners") return "banners";
   if (root === "copy" || root === "navigation" || root === "buttons") return "textos";
   if (root === "layout") return "componentes";
-  if (root === "specialties") return "especialidades";
+  if (root === "specialties" || root === "categories") return "especialidades";
   if (root === "practitioners") return "profesionales";
   if (root === "seo") return "seo";
   return "resumen";

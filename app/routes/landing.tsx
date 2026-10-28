@@ -1,5 +1,5 @@
 import { Link, data } from "react-router";
-import { CITIES, SPECIALTY_MAP } from "../../server/lib/catalog";
+import { CITIES } from "../../server/lib/catalog";
 import { Icon } from "../components/Icon";
 import { PractitionerCard } from "../components/PractitionerCard";
 import { EmptyState, PageHeader } from "../components/ui";
@@ -11,7 +11,11 @@ import type { Route } from "./+types/landing";
 /** Páginas SEO por ciudad y especialidad (Documento Maestro §14.2): solo con oferta real o de muestra rotulada. */
 export async function loader({ request, context, params }: Route.LoaderArgs) {
   const city = CITIES.find((c) => c.slug === params.ciudad);
-  const sp = SPECIALTY_MAP.get(params.especialidad);
+  // Taxonomía efectiva (incluye especialidades agregadas en el CMS).
+  const catalog = await serverApiSafe<{ specialties: { slug: string; name: string; professional: string }[] }>(context, request, "/api/catalog", {
+    specialties: [],
+  });
+  const sp = catalog.specialties.find((s) => s.slug === params.especialidad);
   if (!city || !sp) throw data({ message: "Página no encontrada" }, { status: 404 });
   const { items } = await serverApiSafe<{ items: PublicPractitioner[] }>(
     context,

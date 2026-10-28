@@ -3,14 +3,11 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/api";
 import { formatBytes } from "../../lib/image";
 import type { Cms, PublicPractitioner } from "../../lib/types";
-import { TONES } from "../../../server/lib/catalog";
-import { TONE_LABEL } from "../Specialties";
-import { TONE_CLASS } from "../ui";
-import { CmsIcon, Icon } from "../Icon";
+import { Icon } from "../Icon";
 import { Notice, Spinner } from "../ui";
 import { ColorField, Grid, NumberField, Section, SelectField, TextField, Toggle, useEditor } from "./fields";
 import { FontsSection } from "./fonts";
-import { IconChooser, IconField } from "./icons";
+import { IconField } from "./icons";
 import { ImageField, type MediaItem, UploadButton, useMedia } from "./media";
 import { ROUTE_LABELS, type TabId, type Warning, contentWarnings, fieldId } from "./model";
 
@@ -25,7 +22,7 @@ export function Resumen({ version, dirty, onGo }: { version: number; dirty: bool
     ["portada", "Portada", "Titular, imagen principal, buscador, beneficios y bloques de la página de inicio"],
     ["marca", "Marca, fuentes e íconos", "Colores, tipografías (Google Fonts o subidas), logo, favicon e íconos"],
     ["banners", "Banners", "Campañas con imagen y botón bajo el titular"],
-    ["especialidades", "Especialidades e íconos", "Nombres, íconos Font Awesome, tonos, orden y visibilidad"],
+    ["especialidades", "Especialidades y categorías", "83 especialidades en 11 categorías: edita, oculta, ordena y agrega las tuyas"],
     ["profesionales", "Profesionales", "Foto, frase y perfiles destacados (siempre rotulados)"],
     ["biblioteca", "Biblioteca", "Sube imágenes y fuentes (se guardan en Cloudflare D1)"],
   ];
@@ -451,97 +448,7 @@ export function Componentes() {
   );
 }
 
-/* ------------------------------------------------------------------ Especialidades */
-
-export function Especialidades() {
-  const { config, update, focusPath } = useEditor();
-  const list = [...config.specialties].sort((a, b) => a.order - b.order);
-  const reorder = (from: number, to: number) => {
-    const next = [...list];
-    const [item] = next.splice(from, 1);
-    next.splice(to, 0, item);
-    update(
-      "specialties",
-      next.map((c, i) => ({ ...c, order: i })),
-    );
-  };
-  const patch = (slug: string, change: Partial<Cms["specialties"][number]>) =>
-    update(
-      "specialties",
-      config.specialties.map((c) => (c.slug === slug ? { ...c, ...change } : c)),
-    );
-  return (
-    <Section
-      title="Especialidades"
-      description="Cambia nombre, ícono (Font Awesome), tono, orden y visibilidad. El identificador interno no cambia, así los perfiles existentes se conservan. Ocultar una especialidad la retira de la portada y de los filtros."
-    >
-      <ul className="space-y-3">
-        {list.map((c, i) => (
-          <li
-            key={c.slug}
-            id={fieldId(`specialties.${c.slug}`)}
-            data-field={`specialties.${c.slug}`}
-            className={`rounded-xl p-3 ring-1 ${focusPath === `specialties.${c.slug}` ? "bg-celeste ring-2 ring-azul" : "ring-tinta/10"} ${c.visible ? "" : "opacity-70"}`}
-          >
-            <div className="flex flex-wrap items-center gap-3">
-              <span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${TONE_CLASS[c.tone]}`}>
-                <CmsIcon value={c.icon} className="size-6" />
-              </span>
-              <div className="min-w-40 flex-1">
-                <label htmlFor={`sp-${c.slug}`} className="text-xs muted">
-                  Nombre visible · <code>{c.slug}</code>
-                </label>
-                <input id={`sp-${c.slug}`} className="input" value={c.name} maxLength={55} onChange={(e) => patch(c.slug, { name: e.target.value })} />
-              </div>
-              <div className="flex items-center gap-1">
-                <button type="button" className="icon-btn" disabled={i === 0} onClick={() => reorder(i, i - 1)} aria-label={`Subir ${c.name}`}>
-                  <Icon name="chevron-up" className="size-4" />
-                </button>
-                <button type="button" className="icon-btn" disabled={i === list.length - 1} onClick={() => reorder(i, i + 1)} aria-label={`Bajar ${c.name}`}>
-                  <Icon name="chevron-down" className="size-4" />
-                </button>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={c.visible}
-                  onClick={() => patch(c.slug, { visible: !c.visible })}
-                  className={`chip min-h-10 text-xs font-semibold ${c.visible ? "bg-azul text-white" : "bg-gris-claro text-tinta"}`}
-                >
-                  {c.visible ? "Visible" : "Oculta"}
-                </button>
-              </div>
-            </div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="text-sm font-medium">
-                <p className="mb-1.5">Ícono</p>
-                <IconChooser value={c.icon} label={c.name} onChange={(icon) => patch(c.slug, { icon })} />
-              </div>
-              <div className="text-sm font-medium">
-                <p className="mb-1.5" id={`tone-${c.slug}`}>
-                  Tono del recuadro
-                </p>
-                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby={`tone-${c.slug}`}>
-                  {TONES.map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      role="radio"
-                      aria-checked={c.tone === t}
-                      onClick={() => patch(c.slug, { tone: t })}
-                      className={`chip min-h-10 text-xs font-semibold ${TONE_CLASS[t]} ${c.tone === t ? "ring-2 ring-azul" : "ring-1 ring-tinta/10"}`}
-                    >
-                      {TONE_LABEL[t]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </Section>
-  );
-}
+export { Especialidades } from "./taxonomy";
 
 /* ------------------------------------------------------------------ Profesionales */
 

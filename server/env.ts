@@ -38,6 +38,8 @@ export interface Env {
   /** Payphone (Ecuador): token de la app «API» y Store ID. Con ambos, buscaDR Pay cobra con tarjeta real. */
   PAYPHONE_TOKEN?: string;
   PAYPHONE_STORE_ID?: string;
+  /** Clave maestra (32+ caracteres) para cifrar en D1 las credenciales de pasarelas cargadas desde el CMS. */
+  BUSCADR_SECRETS_KEY?: string;
 }
 
 export type User = {

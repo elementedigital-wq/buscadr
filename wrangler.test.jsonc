@@ -11,6 +11,7 @@
     "BUSCADR_ADMIN_EMAIL": "admin@buscadr.test",
     "BUSCADR_ADMIN_PASSWORD": "admin-test-password-123",
     "WHATSAPP_APP_SECRET": "test-app-secret",
-    "WHATSAPP_VERIFY_TOKEN": "test-verify-token"
+    "WHATSAPP_VERIFY_TOKEN": "test-verify-token",
+    "BUSCADR_SECRETS_KEY": "clave-de-prueba-para-cifrar-credenciales-0123456789"
   }
 }

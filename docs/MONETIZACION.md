@@ -12,7 +12,8 @@ buscaDR combina **SaaS para profesionales** (planes mensuales) con **comisión t
 | Plan **Growth** | $59/mes · + varias ubicaciones, automatizaciones, reportes | Igual |
 | Plan **Clinic** | desde $119/mes · sede con hasta 5 profesionales | Igual |
 | Comisión buscaDR Pay | 8 % de cada cita pagada en línea (la asume el profesional) | `BUSCADR_FEE_BPS=800` |
-| Cobro en consultorio | 0 % (se registra para el historial del profesional) | — |
+| Transferencia bancaria a buscaDR | 8 % (como el pago en línea; confirmación manual del comprobante) | CMS → Pasarelas de pago |
+| Cobro en consultorio | 0 % (se registra para el historial del profesional) | CMS → Pasarelas de pago (activable) |
 
 Los planes se pagan con buscaDR Pay desde `/panel/plan` y se renuevan por 30 días. Durante el piloto `BUSCADR_ENFORCE_PLANS` está apagado: todas las funciones están disponibles para medir uso antes de cobrar.
 

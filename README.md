@@ -45,7 +45,7 @@ Windows PowerShell: `$env:DEMO_API="1"; npm start`. Endpoint: `http://127.0.0.1:
 
 **Cloudflare Pages:** conecta el repositorio GitHub `elementedigital-wq/buscadr`, Framework preset `None`, Build command vacío, Build output directory `public`, rama `main`. Se publica solo la demo local, sin backend compartido.
 
-**Cloudflare Workers con static assets:** `wrangler.jsonc` prepara `public/`; cuando haya acceso autenticado a Cloudflare, ejecutar `npx wrangler deploy` después de probar versión y cuenta de Cloudflare. No anunciar URL hasta que el despliegue se confirme.
+**Cloudflare Workers con static assets:** `wrangler.jsonc` prepara `public/`; cuando haya acceso autenticado a Cloudflare, ejecutar `npx wrangler deploy` después de probar versión y cuenta de Cloudflare. No anunciar URL hasta que el despliegue se confirme. Se incluye un workflow manual `.github/workflows/deploy-cloudflare.yml` que requiere guardar `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` como secretos del repositorio; no guardes las claves en código.
 
 ## Arquitectura objetivo para producción (pendiente)
 

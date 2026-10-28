@@ -25,7 +25,7 @@ function load(){try{return JSON.parse(localStorage.getItem(STORAGE)||'null')}cat
 let db=load()||{users:[],doctors:[],bookings:[],messages:[],favorites:{},reviews:[]};
 let session=null;let searchFilter={q:'',city:'Guayaquil',specialty:'',sort:'rating',map:true};let selectedSlot='';let selectedDate='';let registrationRole='patient';let mapInstance=null;let menuOpen=false;
 try{session=JSON.parse(sessionStorage.getItem('buscadr-session')||'null')}catch{}
-function persist(){localStorage.setItem(STORAGE,JSON.stringify(db));sessionStorage.setItem('buscadr-session',JSON.stringify(session))}
+function persist(){try{localStorage.setItem(STORAGE,JSON.stringify(db))}catch{}try{sessionStorage.setItem('buscadr-session',JSON.stringify(session))}catch{}}
 function allDoctors(){return [...sampleDoctors,...db.doctors]}
 function doctorById(id){return allDoctors().find(d=>d.id===id)}
 function route(){return decodeURIComponent(location.hash.slice(1)||'/')}

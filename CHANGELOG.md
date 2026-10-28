@@ -1,5 +1,11 @@
 # Cambios
 
+## 1.4.1 — 28-oct-2026 · Superusuarios del CMS Maestro (ADR 0018)
+- **CMS → Acceso y contraseña → Superusuarios** (solo el propietario): agregar cuentas con acceso completo al CMS y a la administración (correo, nombre y contraseña inicial de 12+ caracteres, guardada solo como hash) y retirarlas (se cierran sus sesiones).
+- Los superusuarios entran en `/maestro`, cambian su contraseña y la recuperan por correo. No pueden gestionar otros superusuarios.
+- La vista previa del CMS se puede desplazar con el teclado (WCAG 2.1.1).
+- 61 pruebas.
+
 ## 1.4.0 — 28-oct-2026 · Cobro solo con tarjeta, liquidación al médico y citas subsecuentes
 
 ### Cobro con tarjeta y liquidación (ADR 0016)

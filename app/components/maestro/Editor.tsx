@@ -28,7 +28,7 @@ export default function Editor({
   recoveryEmail,
 }: {
   site: Site;
-  owner: { name: string; email: string } | null;
+  owner: { name: string; email: string; role?: "owner" | "superuser" } | null;
   firstDoctor: string | null;
   recoveryEmail: boolean;
 }) {
@@ -180,7 +180,7 @@ export default function Editor({
       case "permisos":
         return <Permisos notify={notify} />;
       case "acceso":
-        return <Acceso email={owner?.email ?? ""} recoveryEmail={recoveryEmail} notify={notify} />;
+        return <Acceso email={owner?.email ?? ""} role={owner?.role ?? "owner"} recoveryEmail={recoveryEmail} notify={notify} />;
       case "pagos":
         return <Pagos notify={notify} />;
       case "resenas":

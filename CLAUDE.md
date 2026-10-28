@@ -21,7 +21,7 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - Trazabilidad: etapas reserva → llegada → consulta → cierre en `care_stages`, QR de cita (`a_…`) y de recepción (`r_…`) resueltos en `/q/:token`, satisfacción 1–5 por etapa en `stage_ratings`, privada y agregada solo con 3+ respuestas (`server/lib/trace.ts`, `server/routes/trace.ts`, ADR 0015).
 - Pagos: SOLO tarjeta (crédito o débito) con los medios del CMS → Pasarelas de pago (`server/lib/gateways.ts`, ADR 0013/0016); `payments.gateway` identifica el medio. buscaDR cobra y liquida al profesional su parte: libro `earnings` → `payouts` (`server/lib/payouts.ts`), comisión editable en `platform_settings` (`getPayoutSettings()`).
 - Citas subsecuentes: series `followup_plans`/`followup_sessions` (`server/routes/followups.ts`, ADR 0017); cada sesión es una cita confirmada con pago con tarjeta hasta 24 h antes.
-- Propietario del CMS: `elemente.digital@gmail.com` (`server/lib/owner.ts`, ADR 0008). Solo esa cuenta ve y usa `/maestro` y `/admin` (`cms: true` en `/api/auth/me`).
+- Propietario del CMS: `elemente.digital@gmail.com` (`server/lib/owner.ts`, ADR 0008). Solo esa cuenta y los superusuarios que ella crea en CMS → Acceso (`staff_role='superadmin'`, ADR 0018) ven y usan `/maestro` y `/admin` (`cms: true` y `cms_role` en `/api/auth/me`). Solo el propietario gestiona superusuarios.
 - Comandos: `npm run dev`, `npm test`, `npm run check`, `npm run test:e2e`, `npm run test:layout` (sin desbordes ni texto aplastado en 320–1440 px), `npm run test:a11y` (axe, WCAG 2.2 AA), `npm run icons`.
 
 ## Reglas no negociables
@@ -32,7 +32,7 @@ buscaDR: «Confianza para encontrar salud». Directorio médico y plataforma de 
 - Calificaciones por etapa: nunca mostrar autor ni respuestas individuales al profesional.
 - Salud: sin promesas clínicas ni diagnósticos; aviso de emergencias (911) siempre visible; motivo de consulta y nombre/nota de las series subsecuentes solo para las dos partes y nunca en avisos de WhatsApp o correo.
 - Ubicación pública siempre aproximada; dirección exacta y contacto solo con cita confirmada.
-- Sin secretos ni contraseñas en Git, commits, logs ni documentos (tampoco la del propietario).
+- Sin secretos ni contraseñas en Git, commits, logs ni documentos (tampoco la del propietario ni las de superusuarios: se crean desde el CMS y quedan como hash en D1).
 - Botones, chips y campos con relleno y texto que no sale del control: `npm run test:layout` y `npm run test:a11y` deben pasar tras cambios de interfaz.
 - WCAG 2.2 AA (verde y celeste solo como fondo o con su versión «ink» para texto; azul sobre celeste con `text-azul-ink`), mobile-first, OWASP, LOPDP.
 - Documentar decisiones en `docs/adr/` y cambios en `CHANGELOG.md`.

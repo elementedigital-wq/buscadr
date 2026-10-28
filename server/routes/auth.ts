@@ -18,6 +18,10 @@ import {
   ownerRow,
   passwordProblem,
   sendOwnerReset,
+  isOwnerUser,
+  isSuperuser,
+  setSuperuserPassword,
+  superuserRow,
   setOwnerPassword,
 } from "../lib/owner";
 import { createSession, destroySession, readSessionToken, sessionCookie } from "../lib/session";
@@ -111,9 +115,11 @@ auth.post("/login", async (c) => {
   const provided = String(b.password ?? "").slice(0, 200);
   const ip = c.get("ip");
   const asAdmin = isOwnerEmail(c.env, email);
-  const accountKey = `login:acct:${ip}:${email}`;
+  // Superusuarios del CMS: mismo límite estricto de intentos que el propietario.
+  const asSuper = !asAdmin && !!(await superuserRow(db, email));
+  const accountKey = asSuper ? `login:admin:${ip}:${email}` : `login:acct:${ip}:${email}`;
   await hit(db, `login:ip:${ip}`, RULES.loginIp);
-  await hit(db, asAdmin ? `login:admin:${ip}` : accountKey, asAdmin ? RULES.owner : RULES.loginAccount);
+  await hit(db, asAdmin ? `login:admin:${ip}` : accountKey, asAdmin || asSuper ? RULES.owner : RULES.loginAccount);
 
   if (asAdmin) {
     // Propietario del CMS: contraseña propia (hash en D1) o, hasta que la cambie, el secreto inicial.
@@ -143,23 +149,27 @@ auth.post("/login", async (c) => {
   return c.json({ user: publicUser(user, c.env) });
 });
 
-/** Propietario: cambia su contraseña (queda como hash en D1) y cierra sus demás sesiones. */
+/** Propietario o superusuario del CMS: cambia su contraseña (hash en D1) y cierra sus demás sesiones. */
 auth.post("/owner/password", async (c) => {
   const user = requireUser(c);
-  if (!isAdmin(user, c.env)) fail(403, "Solo el propietario del CMS puede hacer esto", "FORBIDDEN");
+  if (!isAdmin(user, c.env)) fail(403, "Solo las cuentas del CMS pueden hacer esto", "FORBIDDEN");
   const db = c.env.DB;
   await hit(db, `owner:password:${user.id}`, RULES.owner);
   const b = await readJson<{ current?: string; next?: string }>(c);
   const current = String(b.current ?? "").slice(0, 200);
   const next = String(b.next ?? "");
-  if (!(await checkOwnerPassword(c.env, user, current))) fail(400, "La contraseña actual no es correcta.");
-  const problem = passwordProblem(c.env, next);
+  const owner = isOwnerUser(c.env, user);
+  const currentOk = owner ? await checkOwnerPassword(c.env, user, current) : (await verifyPassword(current, user.password_hash)).ok;
+  if (!currentOk) fail(400, "La contraseña actual no es correcta.");
+  const problem = passwordProblem(c.env, next, user.email);
   if (problem) fail(400, problem);
   if (next === current) fail(400, "La contraseña nueva debe ser distinta de la actual.");
   const token = readSessionToken(c.req.header("cookie") ?? null);
-  await setOwnerPassword(db, c.env, next, token ? await sha256(token) : undefined);
+  const keep = token ? await sha256(token) : undefined;
+  if (owner) await setOwnerPassword(db, c.env, next, keep);
+  else if (isSuperuser(user)) await setSuperuserPassword(db, user.email, next, keep);
   await reset(db, `owner:password:${user.id}`);
-  c.executionCtx.waitUntil(notifyOwnerPasswordChanged(c.env));
+  c.executionCtx.waitUntil(notifyOwnerPasswordChanged(c.env, user.email));
   return c.json({ ok: true, message: "Contraseña actualizada. Se cerraron las demás sesiones." });
 });
 
@@ -172,14 +182,15 @@ auth.post("/owner/recover", async (c) => {
   const ip = c.get("ip");
   await hit(db, `owner:recover:${ip}`, RULES.recover);
   const b = await readJson<{ email?: string }>(c);
-  if (isOwnerEmail(c.env, b.email)) {
+  const email = clean(b.email, 180).toLowerCase();
+  if (isOwnerEmail(c.env, email) || (await superuserRow(db, email))) {
     await hit(db, "owner:recover:global", RULES.recoverGlobal);
-    await sendOwnerReset(db, c.env, new URL(c.req.url).origin, ip);
+    await sendOwnerReset(db, c.env, new URL(c.req.url).origin, ip, email);
   }
   return c.json({
     ok: true,
     message: mailConfigured(c.env)
-      ? "Si el correo corresponde al propietario de buscaDR, enviamos un enlace para crear una contraseña nueva. Vale 30 minutos."
+      ? "Si el correo corresponde a una cuenta del CMS de buscaDR, enviamos un enlace para crear una contraseña nueva. Vale 30 minutos."
       : "La recuperación por correo aún no está activada en Cloudflare (falta RESEND_API_KEY). Mientras tanto, la contraseña inicial es el secreto BUSCADR_ADMIN_PASSWORD.",
   });
 });
@@ -190,13 +201,15 @@ auth.post("/owner/reset", async (c) => {
   await hit(db, `owner:reset:${c.get("ip")}`, RULES.recover);
   const b = await readJson<{ token?: string; password?: string }>(c);
   const next = String(b.password ?? "");
-  const problem = passwordProblem(c.env, next);
+  if (passwordProblem(c.env, next, "")) fail(400, passwordProblem(c.env, next, "") as string);
+  const email = await consumeOwnerReset(db, c.env, String(b.token ?? ""));
+  if (!email) fail(400, "El enlace no es válido o ya venció. Pide uno nuevo desde /maestro.", "RESET_INVALID");
+  const problem = passwordProblem(c.env, next, email);
   if (problem) fail(400, problem);
-  if (!(await consumeOwnerReset(db, c.env, String(b.token ?? ""))))
-    fail(400, "El enlace no es válido o ya venció. Pide uno nuevo desde /maestro.", "RESET_INVALID");
-  const user = await setOwnerPassword(db, c.env, next);
+  const user = isOwnerEmail(c.env, email) ? await setOwnerPassword(db, c.env, next) : await setSuperuserPassword(db, email, next);
+  if (!user) fail(400, "El enlace no es válido o ya venció. Pide uno nuevo desde /maestro.", "RESET_INVALID");
   c.header("Set-Cookie", await createSession(db, user.id));
-  c.executionCtx.waitUntil(notifyOwnerPasswordChanged(c.env));
+  c.executionCtx.waitUntil(notifyOwnerPasswordChanged(c.env, email));
   return c.json({ ok: true, user: publicUser(user, c.env) });
 });
 

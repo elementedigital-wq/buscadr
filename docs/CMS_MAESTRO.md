@@ -22,7 +22,17 @@ El mismo CMS de Yank y Tull, adaptado al directorio médico buscaDR: vista previ
 - **Si se pierde el acceso al correo:** desde una terminal autorizada, `npx wrangler d1 execute buscadr-db --remote --command "UPDATE users SET password_hash='cloudflare-admin-only:v1' WHERE staff_role='admin'"` vuelve a habilitar el secreto `BUSCADR_ADMIN_PASSWORD` como contraseña.
 - Límite de 5 intentos cada 15 min por IP y comparación en tiempo constante. Recomendado antes de abrir al público: Cloudflare Access con MFA delante de `/maestro`, `/admin`, `/api/cms/*` y `/api/admin/*`.
 
-### Correo de recuperación (Resend)
+### Superusuarios (otro acceso al CMS)
+
+Solo el propietario puede crearlos:
+1. Entra a `/maestro` con tu cuenta → **Acceso y contraseña** → **Superusuarios**.
+2. Escribe el correo y el nombre de la persona y una **contraseña inicial** (mínimo 12 caracteres, con letras y números o símbolos, sin incluir el correo) → **Agregar superusuario**.
+3. Compártele la contraseña por un canal seguro. Entra en `/maestro` con su correo y esa contraseña, y la cambia en **Acceso y contraseña**.
+4. **Retirar acceso** cierra sus sesiones y deja sin efecto su contraseña.
+
+Los superusuarios tienen el mismo acceso al CMS y a `/admin` que el propietario, pero no pueden agregar ni retirar superusuarios. La contraseña nunca se guarda en el código ni en Cloudflare: solo como hash en D1.
+
+## Correo de recuperación (Resend)
 
 1. Crea una cuenta en resend.com con el correo del propietario y genera una API key (solo permiso de envío).
 2. Cloudflare → `buscadr` → Variables and Secrets → Production: secreto `RESEND_API_KEY`.

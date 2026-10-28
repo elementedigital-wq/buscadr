@@ -10,6 +10,7 @@ Las migraciones de `migrations/` se aplican **solas** en el primer request tras 
 | `0004_cms_media.sql` | CMS (sitio, versiones, auditoría, permisos, moderación) y medios |
 | `0005_perfiles_muestra.sql` | 12 perfiles de muestra con horarios (marcados `demo=1`, sin registro profesional ni opiniones) |
 | `0006_pasarelas.sql` | Pasarelas de pago configurables (`payment_gateways`) y `payments.gateway` |
+| `0007_trazabilidad.sql` | Trazabilidad: `care_stages`, `stage_ratings`, `appointments.trace_token`, `practitioners.reception_token` |
 
 ## Escribir una migración
 

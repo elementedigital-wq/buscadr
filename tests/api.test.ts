@@ -578,3 +578,132 @@ describe("pasarelas de pago (CMS)", () => {
     expect((await adminPut(adm, "sandbox", { enabled: true })).status).toBe(200);
   });
 });
+
+describe("trazabilidad con QR y satisfacción por etapa", () => {
+  /** Cita presencial confirmada que empieza en 20 minutos (dentro de la ventana de llegada). */
+  async function confirmedSoon(extra: Record<string, unknown> = {}) {
+    const pp = await publishedPractitioner(extra);
+    const patient = await register("patient");
+    const res = await patient.browser.post("/api/appointments", {
+      practitioner_id: pp.id,
+      start: weekday(2, 10),
+      modality: "presencial",
+      idempotency_key: key(),
+    });
+    expect(res.status).toBe(201);
+    const aid = res.data.id as number;
+    expect((await pp.pro.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(200);
+    const start = Date.now() + 20 * 60_000;
+    await db
+      .prepare("UPDATE appointments SET start_ms=?,end_ms=?,block_until_ms=? WHERE id=?")
+      .bind(start, start + 30 * 60_000, start + 30 * 60_000, aid)
+      .run();
+    return { ...pp, patient, aid };
+  }
+
+  it("el profesional escanea el QR del paciente: llegada → consulta → cierre, con tiempos y calificación privada", async () => {
+    const { pro, patient, aid } = await confirmedSoon();
+    const t = await patient.browser.get(`/api/trace/appointments/${aid}`);
+    expect(t.status).toBe(200);
+    expect(t.data.stages.map((s: { stage: string }) => s.stage)).toEqual(["reserva", "llegada", "consulta", "cierre"]);
+    expect(t.data.stages[0].status).toBe("confirmada");
+    expect(t.data.stages[1].status).toBe("pendiente");
+    expect(t.data.qr.url).toMatch(/\/q\/a_[0-9a-f]{32}$/);
+    expect(t.data.qr.path.length).toBeGreaterThan(100);
+    const token = t.data.qr.url.split("/").pop();
+    // El paciente no confirma su llegada a mano (usa el QR de recepción) ni califica algo no registrado.
+    expect((await patient.browser.post(`/api/trace/appointments/${aid}/stages/llegada`)).status).toBe(409);
+    expect((await patient.browser.put(`/api/trace/appointments/${aid}/stages/llegada/rating`, { rating: 5 })).status).toBe(409);
+    // Sin sesión o con otra cuenta, el QR no revela ni confirma nada.
+    expect((await new Browser().get(`/api/trace/scan/${token}`)).data.kind).toBe("login");
+    const other = await register("pro");
+    expect((await other.browser.get(`/api/trace/scan/${token}`)).data.kind).toBe("invalido");
+    expect((await other.browser.post(`/api/trace/scan/${token}`)).status).toBe(409);
+    // El propio paciente que lo abre va a su cita.
+    expect((await patient.browser.get(`/api/trace/scan/${token}`)).data).toMatchObject({ kind: "cita", role: "patient", appointment_id: aid });
+
+    const scan = await pro.browser.get(`/api/trace/scan/${token}`);
+    expect(scan.data).toMatchObject({ kind: "cita", role: "pro", stage: "llegada", block: null });
+    expect((await pro.browser.post(`/api/trace/scan/${token}`)).data.stage).toBe("llegada");
+    expect((await pro.browser.post(`/api/trace/scan/${token}`)).data.stage).toBe("consulta");
+    expect((await pro.browser.post(`/api/trace/scan/${token}`)).data.stage).toBe("cierre");
+    expect((await pro.browser.post(`/api/trace/scan/${token}`)).status).toBe(409);
+    const appt = await db.prepare("SELECT status FROM appointments WHERE id=?").bind(aid).first<{ status: string }>();
+    expect(appt?.status).toBe("completada");
+    const rows = await db.prepare("SELECT stage,method,actor_role FROM care_stages WHERE appointment_id=? ORDER BY confirmed_ms").bind(aid).all();
+    expect(rows.results).toEqual([
+      { stage: "llegada", method: "qr", actor_role: "profesional" },
+      { stage: "consulta", method: "qr", actor_role: "profesional" },
+      { stage: "cierre", method: "qr", actor_role: "profesional" },
+    ]);
+
+    const done = await patient.browser.get(`/api/trace/appointments/${aid}`);
+    expect(done.data.stages.every((s: { status: string }) => s.status === "confirmada")).toBe(true);
+    expect(done.data.metrics.wait_minutes).toBe(0);
+    expect(done.data.qr).toBeNull();
+    // Calificación por etapa: 1 a 5, solo etiquetas válidas, editable.
+    expect((await patient.browser.put(`/api/trace/appointments/${aid}/stages/consulta/rating`, { rating: 6 })).status).toBe(400);
+    const rated = await patient.browser.put(`/api/trace/appointments/${aid}/stages/consulta/rating`, {
+      rating: 5,
+      tags: ["Me escuchó", "Etiqueta inventada"],
+      comment: "Muy clara la explicación",
+    });
+    expect(rated.status).toBe(200);
+    expect(rated.data.stages[2].rating).toMatchObject({ rating: 5, label: "Excelente", tags: ["Me escuchó"] });
+    expect((await patient.browser.put(`/api/trace/appointments/${aid}/stages/reserva/rating`, { rating: 4 })).status).toBe(200);
+    // El profesional no ve la calificación individual ni puede calificar.
+    const proView = await pro.browser.get(`/api/trace/appointments/${aid}`);
+    expect(proView.data.stages[2].rating).toBeNull();
+    expect((await pro.browser.put(`/api/trace/appointments/${aid}/stages/consulta/rating`, { rating: 1 })).status).toBe(403);
+    // Calidad: con menos de 3 calificaciones no muestra promedios (anonimato).
+    const q = await pro.browser.get("/api/trace/quality");
+    expect(q.data.stages.find((s: { stage: string }) => s.stage === "consulta")).toMatchObject({ count: 1, average: null });
+    expect(q.data.traced).toMatchObject({ full: 1, with_qr: 1 });
+    expect(q.data.comments).toEqual([]);
+  });
+
+  it("el paciente confirma su llegada con el QR de recepción; rotarlo invalida el anterior", async () => {
+    const { pro, patient, aid } = await confirmedSoon();
+    const rec = await pro.browser.get("/api/trace/reception");
+    expect(rec.data.url).toMatch(/\/q\/r_[0-9a-f]{32}$/);
+    const token = rec.data.url.split("/").pop();
+    expect((await pro.browser.get(`/api/trace/scan/${token}`)).data).toMatchObject({ kind: "recepcion", own: true });
+    const look = await patient.browser.get(`/api/trace/scan/${token}`);
+    expect(look.data).toMatchObject({ kind: "recepcion", own: false, block: null });
+    expect(look.data.appointment.id).toBe(aid);
+    expect((await patient.browser.post(`/api/trace/scan/${token}`)).data.stage).toBe("llegada");
+    const row = await db.prepare("SELECT method,actor_role FROM care_stages WHERE appointment_id=? AND stage='llegada'").bind(aid).first();
+    expect(row).toEqual({ method: "qr_recepcion", actor_role: "paciente" });
+    // Un paciente sin cita con ese consultorio no confirma nada.
+    const stranger = await register("patient");
+    expect((await stranger.browser.get(`/api/trace/scan/${token}`)).data.appointment).toBeNull();
+    const rotated = await pro.browser.post("/api/trace/reception/rotate");
+    expect(rotated.data.url).not.toContain(token);
+    expect((await patient.browser.get(`/api/trace/scan/${token}`)).data.kind).toBe("invalido");
+    // El profesional sigue con la consulta desde su panel (confirmación manual) y luego no puede saltarse el orden.
+    expect((await pro.browser.post(`/api/trace/appointments/${aid}/stages/cierre`)).status).toBe(409);
+    expect((await pro.browser.post(`/api/trace/appointments/${aid}/stages/consulta`)).status).toBe(200);
+  });
+
+  it("cita virtual: el ingreso del paciente a la videoconsulta registra la llegada; completar sin QR registra el cierre", async () => {
+    const { pro, id } = await publishedPractitioner({ prepay_virtual: false });
+    const patient = await register("patient");
+    const res = await patient.browser.post("/api/appointments", { practitioner_id: id, start: weekday(2, 11), modality: "virtual", idempotency_key: key() });
+    const aid = res.data.id;
+    expect((await pro.browser.post(`/api/appointments/${aid}/actions/confirm`)).status).toBe(200);
+    const start = Date.now() + 10 * 60_000;
+    await db
+      .prepare("UPDATE appointments SET start_ms=?,end_ms=?,block_until_ms=? WHERE id=?")
+      .bind(start, start + 1_800_000, start + 1_800_000, aid)
+      .run();
+    const t = await patient.browser.get(`/api/trace/appointments/${aid}`);
+    expect(t.data.qr).toBeNull();
+    expect(t.data.stages[1]).toMatchObject({ label: "Ingreso a la videoconsulta", can_confirm: true });
+    const entered = await patient.browser.post(`/api/trace/appointments/${aid}/stages/llegada`);
+    expect(entered.status).toBe(200);
+    expect((await patient.browser.post(`/api/trace/appointments/${aid}/stages/consulta`)).status).toBe(409);
+    expect((await pro.browser.post(`/api/appointments/${aid}/actions/complete`)).status).toBe(200);
+    const after = await patient.browser.get(`/api/trace/appointments/${aid}`);
+    expect(after.data.stages.map((s: { status: string }) => s.status)).toEqual(["confirmada", "confirmada", "sin_registro", "confirmada"]);
+  });
+});

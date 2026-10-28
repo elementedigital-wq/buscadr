@@ -46,6 +46,38 @@ import { loadAgenda } from "./practitioners";
 
 export const appointments = new Hono<AppBindings>();
 
+/**
+ * Cierra la atención: estado «completada», etapa «cierre» de la trazabilidad (si faltaba) y aviso al
+ * paciente para calificar. Devuelve la promesa del aviso para `waitUntil`.
+ */
+export async function completeAppointment(
+  env: Env,
+  o: string,
+  a: AppointmentRow,
+  p: PractitionerRow,
+  actor: { id: string; role: "profesional" | "paciente" },
+  method: "qr" | "manual",
+) {
+  const db = env.DB;
+  await transition(db, a, TRANSITIONS.complete.to, { completed_at: nowText() });
+  await db
+    .prepare("INSERT OR IGNORE INTO care_stages(appointment_id,stage,confirmed_ms,actor_id,actor_role,method) VALUES(?,?,?,?,?,?)")
+    .bind(a.id, "cierre", Date.now(), actor.id, actor.role, method)
+    .run();
+  const lite = { id: a.id, patient_id: a.patient_id, start_ms: a.start_ms, name: fullName(p), demo: p.demo };
+  // Se devuelve envuelta para que el llamador decida si espera el aviso (waitUntil).
+  return {
+    notice: notifyPatient(
+      env,
+      o,
+      lite,
+      "cita_completada",
+      "¿Cómo fue tu cita?",
+      `Califica cada etapa de tu atención con ${fullName(p)} y cuéntanos tu experiencia. Tu opinión ayuda a mejorar el servicio.`,
+    ),
+  };
+}
+
 export type AppointmentRow = {
   id: number;
   practitioner_id: number;
@@ -88,7 +120,7 @@ function roleOf(a: AppointmentRow, user: User, env: Env): Role | null {
   return null;
 }
 
-async function loadFor(env: Env, user: User, id: number) {
+export async function loadFor(env: Env, user: User, id: number) {
   const a = await env.DB.prepare("SELECT * FROM appointments WHERE id=?").bind(id).first<AppointmentRow>();
   if (!a) fail(404, "Cita no encontrada");
   const role = roleOf(a, user, env);
@@ -576,16 +608,8 @@ appointments.post("/:id/actions/:action", async (c) => {
       break;
     }
     case "complete":
-      await transition(db, a, TRANSITIONS.complete.to, { completed_at: nowText() });
       c.executionCtx.waitUntil(
-        notifyPatient(
-          c.env,
-          o,
-          lite,
-          "cita_completada",
-          "¿Cómo fue tu cita?",
-          `Cuéntanos tu experiencia con ${fullName(p)}. Tu opinión verificada ayuda a otros pacientes.`,
-        ),
+        (await completeAppointment(c.env, o, a, p, { id: user.id, role: role === "patient" ? "paciente" : "profesional" }, "manual")).notice,
       );
       break;
     case "no_show":

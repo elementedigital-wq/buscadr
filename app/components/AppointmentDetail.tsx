@@ -6,7 +6,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useRevalidator } from "react-router";
 import { type ApiError, api } from "../lib/api";
 import { addDays, dateTime, dayParts, money, timeOf, toLocalDate, whenLabel } from "../lib/format";
-import type { AppointmentView, Slot } from "../lib/types";
+import type { AppointmentView, Slot, TraceView } from "../lib/types";
+import { CareTrace } from "./CareTrace";
 import { Icon } from "./Icon";
 import { Avatar, DemoBadge, Notice, Spinner, StatusBadge } from "./ui";
 
@@ -230,7 +231,7 @@ function Chat({ a, onSent }: { a: AppointmentView; onSent: () => void }) {
   );
 }
 
-export function AppointmentDetail({ a, fresh = false }: { a: AppointmentView; fresh?: boolean }) {
+export function AppointmentDetail({ a, fresh = false, trace }: { a: AppointmentView; fresh?: boolean; trace?: TraceView | null }) {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const [busy, setBusy] = useState<string | null>(null);
@@ -332,10 +333,12 @@ export function AppointmentDetail({ a, fresh = false }: { a: AppointmentView; fr
           )}
           {a.cancel_reason && <p className="border-t border-tinta/5 px-5 py-3 text-sm muted">{a.cancel_reason}</p>}
         </section>
+        {trace && ["confirmada", "completada", "no_asistio"].includes(a.status) && <CareTrace initial={trace} isPro={isPro} />}
 
         {(error || info) && <Notice tone={error ? "danger" : "success"}>{error ?? info}</Notice>}
 
-        {a.actions.length > 0 && (
+        {/* «review» tiene su propio formulario: sin otras acciones no se muestra una tarjeta vacía. */}
+        {a.actions.some((x) => x !== "review") && (
           <section className="card p-5" aria-label="Acciones">
             <div className="flex flex-wrap gap-2">
               {has("pay") && (
@@ -420,7 +423,16 @@ export function AppointmentDetail({ a, fresh = false }: { a: AppointmentView; fr
                 <p className="mt-1 text-sm text-white/85">
                   {a.video.open ? "La sala está abierta." : "Cita de prueba: puedes ver la sala."} Usa auriculares y un lugar privado.
                 </p>
-                <a href={a.video.url} target="_blank" rel="noopener noreferrer" className="btn mt-3 w-full bg-white text-tinta hover:bg-celeste">
+                <a
+                  href={a.video.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn mt-3 w-full bg-white text-tinta hover:bg-celeste"
+                  onClick={() => {
+                    // Trazabilidad: el ingreso del paciente a la sala registra la etapa «llegada».
+                    if (!isPro) api(`/api/trace/appointments/${a.id}/stages/llegada`, { body: {} }).catch(() => {});
+                  }}
+                >
                   Entrar a la videollamada
                 </a>
               </>
@@ -446,11 +458,12 @@ export function AppointmentDetail({ a, fresh = false }: { a: AppointmentView; fr
               </a>
             )}
             {a.checkin_code && (
-              <div className="mt-4 rounded-2xl bg-celeste/70 p-4 text-center">
-                <p className="text-xs font-semibold tracking-wide uppercase muted">Código de llegada</p>
-                <p className="font-display text-3xl font-extrabold tracking-[0.2em] text-azul">{a.checkin_code}</p>
-                <p className="text-xs muted">{isPro ? "El paciente lo muestra al llegar." : "Muéstralo en recepción."}</p>
-              </div>
+              <a href="#trazabilidad" className="mt-4 flex items-center gap-3 rounded-2xl bg-celeste/70 p-4 text-sm font-semibold text-azul-ink">
+                <Icon name="qrcode" className="size-6 shrink-0" />
+                {isPro
+                  ? "Registra la llegada escaneando el QR del paciente o desde «Trazabilidad»."
+                  : "Tu QR de llegada está en «Trazabilidad de tu atención»."}
+              </a>
             )}
           </section>
         )}

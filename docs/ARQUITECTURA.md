@@ -31,14 +31,15 @@ Cron */30 → vence retenciones y pagos, planes, recordatorios 24 h / 1 h, limpi
 | `server/lib/payments.ts` · `settle.ts` | Proveedores de pago, liquidación y reembolso idempotentes |
 | `server/lib/gateways.ts` · `secrets.ts` · `server/cms/payments.ts` | Pasarelas configurables desde el CMS (orden, textos, cuenta bancaria) y credenciales cifradas con AES-GCM (ADR 0013) |
 | `server/lib/taxonomy-data.ts` · `taxonomy.ts` | 83 especialidades base en 11 categorías + las propias del CMS, cacheadas por versión publicada (ADR 0014) |
+| `server/routes/trace.ts` · `server/lib/trace.ts` · `qr.ts` | Trazabilidad por etapas con QR de cita y de recepción, satisfacción por etapa y métricas de calidad anónimas (ADR 0015) |
 | `server/lib/notify.ts` · `whatsapp.ts` · `mail.ts` | Notificaciones multicanal con consentimiento |
 | `server/lib/practitioners.ts` | Vista pública (coordenadas aproximadas, registro enmascarado, sin dirección) y reputación |
 
 ## Páginas
 
 - **Públicas:** `/` (portada), `/buscar` (lista y mapa), `/especialidades` (por categoría, con búsqueda), `/doctor/:slug` (perfil + calendario de reserva), `/medicos/:ciudad/:especialidad` (landing SEO), `/para-profesionales`, `/planes`, `/como-funciona`, `/privacidad`.
-- **Paciente:** `/citas`, `/citas/:id` (estado, reprogramar, cancelar, chat, video, pago, opinión), `/pagar/:id`, `/favoritos`, `/notificaciones`, `/cuenta`.
-- **Profesional** (`/panel`, dashboard personalizado para médicos, especialistas, clínicas y servicios): resumen con KPIs y solicitudes, agenda semanal, detalle de cita, horarios y bloqueos, perfil y tarifas, ingresos, plan.
+- **Paciente:** `/citas`, `/citas/:id` (estado, trazabilidad con QR y calificación por etapa, reprogramar, cancelar, chat, video, pago, opinión), `/q/:código` (resultado de escanear un QR), `/pagar/:id`, `/favoritos`, `/notificaciones`, `/cuenta`.
+- **Profesional** (`/panel`, dashboard personalizado para médicos, especialistas, clínicas y servicios): resumen con KPIs y solicitudes, agenda semanal, detalle de cita, horarios y bloqueos, perfil y tarifas, ingresos, plan, escanear QR y calidad (satisfacción por etapa, tiempos y QR de recepción).
 - **Propietario:** `/admin` y `/maestro` (solo `elemente.digital@gmail.com`).
 
 ## Seguridad y privacidad

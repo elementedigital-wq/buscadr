@@ -11,6 +11,7 @@ import { payments } from "./routes/payments";
 import { favorites, practitioners } from "./routes/practitioners";
 import { pro } from "./routes/pro";
 import { system } from "./routes/system";
+import { trace } from "./routes/trace";
 import { whatsapp } from "./routes/whatsapp";
 
 /** Cabecera anti-CSRF que envía la web (app/lib/api.ts). Los formularios externos no pueden añadirla. */
@@ -56,6 +57,7 @@ api.route("/payments", payments);
 api.route("/admin", admin);
 api.route("/cms", cms);
 api.route("/whatsapp", whatsapp);
+api.route("/trace", trace);
 
 api.notFound((c) => c.json({ error: "Endpoint no encontrado", code: "NOT_FOUND", request_id: c.get("requestId") }, 404));
 

@@ -22,6 +22,8 @@ type Kpis = {
   notifications: { channel: string; status: string; n: number }[];
   funnel: { views: number; requests: number; completed: number; conversion: number | null };
   bySpecialty: { specialty: string; name: string; n: number }[];
+  satisfaction: { stage: string; label: string; n: number; avg: number | null }[];
+  traced_qr: number;
   notes: string;
 };
 
@@ -198,6 +200,23 @@ function KpiView({ k }: { k: Kpis }) {
           )}
         </section>
       </div>
+      <section className="card p-5" aria-labelledby="satisfaccion">
+        <h2 id="satisfaccion" className="text-lg font-extrabold">
+          Satisfacción por etapa de la atención (90 días)
+        </h2>
+        <p className="text-sm muted">Escala de 1 a 5 registrada con la trazabilidad por QR · {k.traced_qr} citas con etapas confirmadas por QR.</p>
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {(k.satisfaction ?? []).map((s) => (
+            <li key={s.stage} className="rounded-2xl bg-fondo p-4">
+              <p className="text-sm font-semibold">{s.label}</p>
+              <p className="mt-1 font-display text-2xl font-extrabold">{s.avg == null ? "—" : `${s.avg.toLocaleString("es-EC")} / 5`}</p>
+              <p className="text-xs muted">
+                {s.n} {s.n === 1 ? "calificación" : "calificaciones"}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </section>
       <p className="text-xs muted">{k.notes}</p>
     </div>
   );

@@ -7,6 +7,7 @@ import { Hono } from "hono";
 import type { AppBindings } from "../env";
 import { type AppointmentStatus, STATUS_LABEL } from "../lib/appointments";
 import { getTaxonomy } from "../lib/taxonomy";
+import { type Stage, stageCopy } from "../lib/trace";
 import { track } from "../lib/events";
 import { readJson, requireAdmin } from "../lib/guards";
 import { clean, fail } from "../lib/http";
@@ -85,6 +86,24 @@ admin.get("/kpis", async (c) => {
     ),
   ]);
   const tax = await getTaxonomy(db);
+  // Satisfacción por etapa de la atención (QR y escala 1–5), sin perfiles de muestra.
+  const satisfaction = (
+    await db
+      .prepare(
+        `SELECT r.stage, COUNT(*) AS n, ROUND(AVG(r.rating),2) AS avg FROM stage_ratings r JOIN practitioners p ON p.id=r.practitioner_id
+         WHERE p.demo=0 AND r.updated_at > datetime('now','-90 days') GROUP BY r.stage`,
+      )
+      .all<{ stage: string; n: number; avg: number }>()
+      .catch(() => ({ results: [] as { stage: string; n: number; avg: number }[] }))
+  ).results;
+  const tracedQr = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT cs.appointment_id) AS n FROM care_stages cs JOIN appointments a ON a.id=cs.appointment_id JOIN practitioners p ON p.id=a.practitioner_id
+       WHERE p.demo=0 AND cs.method IN ('qr','qr_recepcion') AND a.start_ms > ?`,
+    )
+    .bind(Date.now() - 90 * 86_400_000)
+    .first<{ n: number }>()
+    .catch(() => null);
   return c.json({
     northStar,
     byStatus: byStatus.map((s) => ({ ...s, label: STATUS_LABEL[s.status as AppointmentStatus] ?? s.status })),
@@ -105,6 +124,11 @@ admin.get("/kpis", async (c) => {
       conversion: funnel?.views ? (funnel.requests ?? 0) / funnel.views : null,
     },
     bySpecialty: bySpecialty.map((x) => ({ ...x, name: tax.nameOf(x.specialty) })),
+    satisfaction: ["reserva", "llegada", "consulta", "cierre"].map((stage) => {
+      const r = satisfaction.find((x) => x.stage === stage);
+      return { stage, label: stageCopy(stage as Stage, "presencial").label, n: r?.n ?? 0, avg: r?.avg ?? null };
+    }),
+    traced_qr: tracedQr?.n ?? 0,
     notes:
       "Datos reales: excluye perfiles y citas de muestra. Ingresos de buscaDR = comisión de citas pagadas en línea + planes (MRR). Los pagos en modo sandbox no son dinero real.",
   });

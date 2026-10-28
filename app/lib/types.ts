@@ -129,3 +129,29 @@ export type AppointmentView = {
 };
 
 export type Notification = { id: number; kind: string; title: string; body: string; link: string; read_at: string | null; created_at: string };
+
+export type TraceStage = {
+  stage: "reserva" | "llegada" | "consulta" | "cierre";
+  label: string;
+  icon: string;
+  question: string;
+  tags: string[];
+  status: "confirmada" | "pendiente" | "sin_registro";
+  confirmed_ms: number | null;
+  actor_role: "paciente" | "profesional" | "sistema" | null;
+  method: "qr" | "qr_recepcion" | "manual" | "auto" | null;
+  rating: { rating: number; label: string; tags: string[]; comment: string } | null;
+  can_rate: boolean;
+  can_confirm: boolean;
+  block: string | null;
+};
+export type TraceView = {
+  appointment_id: number;
+  modality: "presencial" | "virtual";
+  status: string;
+  stages: TraceStage[];
+  next_stage: TraceStage["stage"] | null;
+  metrics: { punctuality_minutes: number | null; wait_minutes: number | null; duration_minutes: number | null; delay_minutes: number | null };
+  qr: { url: string; size: number; path: string; code: string } | null;
+  rating_labels: string[];
+};

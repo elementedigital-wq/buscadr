@@ -1,5 +1,22 @@
 # Cambios
 
+## 1.3.0 — 28-oct-2026 · Trazabilidad de la atención con QR y satisfacción por etapa
+
+### Trazabilidad
+- **Cuatro etapas por cita**: reserva → llegada (o ingreso a la sala virtual) → consulta → cierre, con hora, quién confirmó y cómo. El cierre completa la cita.
+- **QR de la cita** en «Mis citas» (con «Ver en grande» y código de respaldo): el profesional lo escanea para registrar llegada, inicio de consulta y cierre.
+- **QR de recepción** por profesional (Panel → Calidad, póster imprimible y rotable): el paciente lo escanea al llegar y confirma su llegada.
+- **Panel → Escanear QR**: escáner con la cámara (BarcodeDetector) e ingreso manual del código; página `/q/:código` con el resultado.
+- Línea de tiempo con progreso y métricas: puntualidad, espera y duración de la atención. Al entrar a una videoconsulta se registra la llegada.
+
+### Satisfacción
+- **Escala de 1 a 5 por etapa** (caras con texto, etiquetas por etapa y comentario opcional), editable 14 días.
+- **Panel → Calidad**: promedio, distribución y etiquetas por etapa, tiempos y comentarios, **anónimos y solo con 3+ respuestas**. Administración muestra la satisfacción por etapa y las citas trazadas con QR.
+
+### Técnico
+- Migración aditiva `0007_trazabilidad.sql` (`care_stages`, `stage_ratings`, tokens de cita y de recepción). API `/api/trace/*`. QR SVG generado en el servidor (`qrcode-generator` 1.4.4). ADR 0015.
+- 56 pruebas (QR de la cita en tres etapas con controles de privacidad y seguridad, QR de recepción y rotación, cita virtual). Maquetación (8 anchos) y accesibilidad sin problemas, con las nuevas páginas del panel.
+
 ## 1.2.0 — 28-oct-2026 · Taxonomía médica completa y pasarelas de pago configurables
 
 ### Especialidades

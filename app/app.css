@@ -235,6 +235,23 @@
   color: #b91c1c;
 }
 
+/* Impresión del cartel con el QR de recepción: solo se imprime el área marcada. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    inset: 0 0 auto;
+    margin: 0 auto;
+    box-shadow: none;
+  }
+}
+
 /* Barra de progreso de navegación (root.tsx). */
 .nav-progress {
   position: fixed;

@@ -18,7 +18,7 @@ const H = { "Content-Type": "application/json", "X-Requested-With": "BUSCADR-WEB
 
 const PUBLIC = ["/", "/buscar", "/especialidades", "/doctor/dr-andres-salazar", "/medicos/guayaquil/pediatria", "/planes", "/para-profesionales", "/como-funciona", "/privacidad", "/cuenta", "/cuenta?tab=registro", "/maestro"];
 const PATIENT = ["/", "/citas", "/favoritos", "/notificaciones", "/cuenta"];
-const PRO = ["/panel", "/panel/agenda", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
+const PRO = ["/panel", "/panel/agenda", "/panel/escanear", "/panel/calidad", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
 
 const browser = await chromium.launch();
 const found = [];

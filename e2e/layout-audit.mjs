@@ -38,7 +38,7 @@ const PUBLIC = [
   "/no-existe",
 ];
 const PATIENT = ["/", "/citas", "/favoritos", "/notificaciones", "/cuenta", "/doctor/dr-andres-salazar"];
-const PRO = ["/panel", "/panel/agenda", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
+const PRO = ["/panel", "/panel/agenda", "/panel/escanear", "/panel/calidad", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
 
 /** Corre en la página: devuelve problemas de maquetación visibles. */
 function audit() {

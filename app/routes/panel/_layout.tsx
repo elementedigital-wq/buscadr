@@ -24,6 +24,8 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 const LINKS = [
   ["/panel", "Resumen", "chart", true],
   ["/panel/agenda", "Agenda", "agenda", false],
+  ["/panel/escanear", "Escanear QR", "qrcode", false],
+  ["/panel/calidad", "Calidad", "face-smile", false],
   ["/panel/horarios", "Horarios", "clock", false],
   ["/panel/perfil", "Perfil y tarifas", "user-doctor", false],
   ["/panel/ingresos", "Ingresos", "wallet", false],

@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { AppBindings, Env, User } from "../env";
 import { fail } from "./http";
-import { isOwnerEmail } from "./owner";
+import { isOwnerUser, isSuperuser } from "./owner";
 
 export function requireUser(c: Context<AppBindings>): User {
   const user = c.get("user");
@@ -10,11 +10,18 @@ export function requireUser(c: Context<AppBindings>): User {
 }
 
 /**
- * Administración y CMS: solo la cuenta del propietario (correo de `ownerEmail`) que inició sesión con
- * su contraseña (staff_role='admin' solo lo asigna ese inicio de sesión). Ninguna otra cuenta.
+ * Administración y CMS: la cuenta del propietario (correo de `ownerEmail`, staff_role='admin' solo lo
+ * asigna su inicio de sesión) y los superusuarios que él crea (staff_role='superadmin', ADR 0018).
  */
 export function isAdmin(user: User | null, env: Env) {
-  return !!(user && user.staff_role === "admin" && !user.demo && isOwnerEmail(env, user.email));
+  return isOwnerUser(env, user) || isSuperuser(user);
+}
+
+/** Solo el propietario: crear o retirar superusuarios. */
+export function requireOwner(c: Context<AppBindings>): User {
+  const user = requireUser(c);
+  if (!isOwnerUser(c.env, user)) fail(403, "Solo el propietario de buscaDR puede gestionar superusuarios", "FORBIDDEN");
+  return user;
 }
 
 export function requireAdmin(c: Context<AppBindings>): User {
@@ -39,6 +46,8 @@ export const publicUser = (u: User | null, env?: Env) =>
         admin: env ? isAdmin(u, env) : u.staff_role === "admin",
         /** El botón del CMS Maestro solo se muestra con la cuenta elemente.digital@gmail.com (ADR 0003). */
         cms: env ? isAdmin(u, env) : false,
+        /** «owner» (propietario) o «superuser» (acceso completo al CMS, sin gestionar superusuarios). */
+        cms_role: env ? (isOwnerUser(env, u) ? "owner" : isSuperuser(u) ? "superuser" : null) : null,
         provider: u.provider,
         email_verified: !!u.email_verified,
         google_linked: !!u.google_sub,

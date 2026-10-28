@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import type { Env } from "../server/env";
 import { b64url, sha256 } from "../server/lib/crypto";
+import { ADMIN_PASSWORD_MARKER } from "../server/lib/owner";
 import { ADMIN, Browser, admin, register, testEnv } from "./helpers";
 
 const db = (env as unknown as Env).DB;
@@ -77,5 +78,59 @@ describe("propietario del CMS", () => {
     const setup = await new Browser().get("/api/cms/setup");
     expect(setup.data.ownerConfigured).toBe(true);
     expect(setup.data.recoveryEmail).toBe(!!testEnv.RESEND_API_KEY);
+  });
+});
+
+describe("superusuarios del CMS", () => {
+  it("el propietario crea un superusuario: entra al CMS y a la administración, cambia su clave y el propietario puede retirarlo", async () => {
+    // Las pruebas anteriores cambiaron la contraseña del propietario: vuelve al secreto inicial.
+    await db.prepare("UPDATE users SET password_hash=? WHERE email=?").bind(ADMIN_PASSWORD_MARKER, ADMIN.email.toLowerCase()).run();
+    const owner = await admin();
+    const pro = await register("pro");
+    expect((await pro.browser.post("/api/cms/superusers", { email: "x@test.ec", password: "Clave-Segura-2026" })).status).toBe(403);
+    expect((await owner.post("/api/cms/superusers", { email: "super@test.ec", password: "corta123" })).status).toBe(400);
+    const added = await owner.post("/api/cms/superusers", { email: "Super@Test.ec", name: "Dr. Superusuario", password: "Clave-Segura-2026" });
+    expect(added.status).toBe(201);
+    expect(added.data.superusers.map((u: { email: string }) => u.email)).toEqual(["super@test.ec"]);
+    expect((await owner.post("/api/cms/superusers", { email: "super@test.ec", password: "Clave-Segura-2026" })).status).toBe(409);
+    const row = await db
+      .prepare("SELECT staff_role,password_hash FROM users WHERE email='super@test.ec'")
+      .first<{ staff_role: string; password_hash: string }>();
+    expect(row?.staff_role).toBe("superadmin");
+    expect(row?.password_hash.startsWith("pbkdf2-sha256:")).toBe(true);
+    const audit = await db.prepare("SELECT details FROM cms_audit WHERE action='superuser_added'").all<{ details: string }>();
+    expect(JSON.stringify(audit.results)).not.toContain("Clave-Segura");
+
+    const su = new Browser();
+    expect((await su.post("/api/auth/login", { email: "super@test.ec", password: "otra-clave-1234" })).status).toBe(401);
+    const login = await su.post("/api/auth/login", { email: "super@test.ec", password: "Clave-Segura-2026" });
+    expect(login.status).toBe(200);
+    expect(login.data.user).toMatchObject({ admin: true, cms: true, cms_role: "superuser" });
+    expect((await su.get("/api/cms/session")).data.user.role).toBe("superuser");
+    expect((await su.get("/api/admin/kpis")).status).toBe(200);
+    expect((await su.get("/api/admin/payouts")).status).toBe(200);
+    // Un superusuario no gestiona superusuarios.
+    expect((await su.get("/api/cms/superusers")).status).toBe(403);
+    expect((await su.post("/api/cms/superusers", { email: "otro@test.ec", password: "Clave-Segura-2026" })).status).toBe(403);
+    // Cambia su propia contraseña.
+    expect((await su.post("/api/auth/owner/password", { current: "Clave-Segura-2026", next: "Nueva-Clave-Medico-2026" })).status).toBe(200);
+    expect((await new Browser().post("/api/auth/login", { email: "super@test.ec", password: "Clave-Segura-2026" })).status).toBe(401);
+    expect((await new Browser().post("/api/auth/login", { email: "super@test.ec", password: "Nueva-Clave-Medico-2026" })).status).toBe(200);
+    // Recuperación por enlace también para superusuarios.
+    const token = b64url(crypto.getRandomValues(new Uint8Array(32)));
+    await db
+      .prepare("INSERT INTO owner_resets(token_hash,email,expires_at,created_at) VALUES(?,?,?,?)")
+      .bind(await sha256(token), "super@test.ec", Date.now() + 600_000, Date.now())
+      .run();
+    const reset = await new Browser().post("/api/auth/owner/reset", { token, password: "Recuperada-Medico-2026" });
+    expect(reset.status).toBe(200);
+    expect(reset.data.user.cms_role).toBe("superuser");
+    // El propietario retira el acceso: sesiones cerradas y la contraseña deja de valer.
+    const id = added.data.superusers[0].id;
+    expect((await owner.del(`/api/cms/superusers/${id}`)).status).toBe(200);
+    expect((await su.get("/api/cms/session")).status).toBe(403);
+    expect((await su.get("/api/auth/me")).data.user).toBeNull();
+    expect((await new Browser().post("/api/auth/login", { email: "super@test.ec", password: "Recuperada-Medico-2026" })).status).toBe(401);
+    expect((await owner.get("/api/auth/me")).data.user.cms_role).toBe("owner");
   });
 });

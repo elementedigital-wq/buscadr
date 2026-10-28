@@ -5,9 +5,10 @@ import { clean, fail } from "../lib/http";
 import { deleteImage, mediaStorage, putImage, readFontUpload, readImageUpload } from "../lib/media";
 import { type IconStyle, searchIcons } from "./icons";
 import { cmsPayments } from "./payments";
+import { cmsSuperusers } from "./superusers";
 import { DEFAULT_CMS, FONT_FAMILY, normalizeCms, readConfig } from "./model";
 
-/** Solo la cuenta de administración configurada en los secretos de Cloudflare administra el CMS. */
+/** El propietario y los superusuarios que él crea administran el CMS (ADR 0008 y 0018). */
 export const isCmsOwner = isAdmin;
 
 /** Garantiza la fila del documento CMS (las tablas las crean las migraciones). */
@@ -39,10 +40,16 @@ cms.use("*", async (c, next) => {
 });
 
 cms.route("/payments", cmsPayments);
+cms.route("/superusers", cmsSuperusers);
 
 cms.get("/session", (c) => {
   const user = c.get("user")!;
-  return c.json({ authorized: true, user: { name: user.name, email: user.email }, mediaEnabled: true, mediaStorage: mediaStorage(c.env) });
+  return c.json({
+    authorized: true,
+    user: { name: user.name, email: user.email, role: user.staff_role === "admin" ? "owner" : "superuser" },
+    mediaEnabled: true,
+    mediaStorage: mediaStorage(c.env),
+  });
 });
 
 cms.get("/site", async (c) => {
@@ -135,7 +142,7 @@ cms.post("/users/:id/access", async (c) => {
   if (typeof input.enabled !== "boolean") fail(400, "Estado incorrecto");
   const target = await c.env.DB.prepare("SELECT id,staff_role FROM users WHERE id=?").bind(id).first<{ staff_role: string }>();
   if (!target) fail(404, "Usuario no encontrado");
-  if (target.staff_role === "admin") fail(403, "La cuenta administrativa no puede gestionarse aquí");
+  if (target.staff_role) fail(403, "Las cuentas del CMS (propietario y superusuarios) no se gestionan aquí");
   await c.env.DB.prepare("INSERT INTO cms_user_access(user_id,enabled) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET enabled=excluded.enabled")
     .bind(id, input.enabled ? 1 : 0)
     .run();

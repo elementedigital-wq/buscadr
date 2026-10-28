@@ -1,6 +1,6 @@
 {
   "name": "buscadr",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "type": "module",
   "description": "buscaDR: directorio médico y SaaS de agenda para profesionales y clínicas de Ecuador. Citas presenciales y virtuales, pagos registrados en la app, WhatsApp y CMS Maestro. Cloudflare Workers + D1, API Hono y web React Router con SSR.",

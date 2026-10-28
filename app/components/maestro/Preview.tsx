@@ -116,7 +116,8 @@ export function Preview({ config, pages, onFocusPath }: { config: Cms; pages: { 
           Abrir publicado <Icon name="arrow" className="size-3.5" />
         </a>
       </div>
-      <div ref={box} className="relative flex-1 overflow-auto bg-gris-claro/60 p-3">
+      {/* biome-ignore lint/a11y/noNoninteractiveTabindex: zona con desplazamiento; WCAG 2.1.1 exige poder desplazarla con el teclado (axe scrollable-region-focusable) */}
+      <div ref={box} className="relative flex-1 overflow-auto bg-gris-claro/60 p-3" role="region" aria-label="Vista previa" tabIndex={0}>
         <div className="mx-auto" style={{ width: width * scale, height: height * scale }}>
           <iframe
             ref={frame}

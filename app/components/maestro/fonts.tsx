@@ -16,15 +16,15 @@ import { useMedia } from "./media";
 import { fieldId } from "./model";
 
 type FontDef = Cms["theme"]["fonts"][number];
-const SAMPLE = "Herramientas y equipos a tu alcance · 0123";
+const SAMPLE = "Encuentra a tu médico y agenda tu cita · 0123";
 const WEIGHT_SETS = ["400;500;600;700;800", "400;600;700", "400;700", ""];
 
 /** Carga en el CMS todas las fuentes de la biblioteca para ver las muestras. */
 export function FontLibraryAssets({ fonts }: { fonts: FontDef[] }) {
-  const links = fonts.filter((f) => f.source === "google").map(googleFontsHref);
+  const links = fonts.filter((f) => f.source === "google" && !f.files.length).map(googleFontsHref);
   // fontAssets solo emite las familias en uso: se le pasa cada fuente como si estuviera elegida.
   const css = fonts
-    .filter((f) => f.source === "upload")
+    .filter((f) => f.files.length)
     .map((f) => fontAssets({ theme: { font: f.family, bodyFont: f.family, fonts: [f] } } as unknown as Cms).css)
     .join("");
   return (
@@ -81,6 +81,7 @@ export function FontsSection() {
   const fonts = config.theme.fonts;
   const families = [...BUILTIN_FONTS, ...fonts.map((f) => f.family)];
   const [google, setGoogle] = useState("");
+  const [hosted, setHosted] = useState(true);
   const [busy, setBusy] = useState<"google" | "upload" | null>(null);
   const [uploadFamily, setUploadFamily] = useState("");
   const [error, setError] = useState("");
@@ -94,12 +95,19 @@ export function FontsSection() {
     if (!FONT_FAMILY.test(google.trim())) return setError("Escribe el nombre de la familia tal como aparece en Google Fonts (letras, números y espacios).");
     if (families.some((f) => f.toLowerCase() === google.trim().toLowerCase())) return setError("Esa familia ya está en la biblioteca.");
     setBusy("google");
-    const def = await findGoogleFont(google);
+    let def: FontDef | null = null;
+    try {
+      // Importada: buscaDR descarga los WOFF2 (latin) y los sirve desde su dominio (sin depender de Google en cada visita).
+      def = hosted ? await api<FontDef>("/api/cms/fonts/google", { body: { family: google.trim() } }) : await findGoogleFont(google);
+    } catch (err) {
+      setBusy(null);
+      return setError((err as Error).message);
+    }
     setBusy(null);
     if (!def) return setError(`No encontramos «${google.trim()}» en Google Fonts. Revisa el nombre en fonts.google.com.`);
     setFonts([...fonts, def]);
     setGoogle("");
-    notify(`${def.family} agregada. Elígela en Titulares o Textos para usarla.`);
+    notify(`${def.family} ${hosted ? "importada y alojada en buscaDR" : "agregada"}. Elígela en Titulares o Textos para usarla.`);
   }
 
   async function upload(files: FileList | null) {
@@ -170,7 +178,7 @@ export function FontsSection() {
       </div>
 
       <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-        <form onSubmit={addGoogle} className="rounded-xl p-4 ring-1 ring-black/10">
+        <form onSubmit={addGoogle} className="rounded-xl p-4 ring-1 ring-tinta/10">
           <p className="flex items-center gap-2 font-semibold">
             <Icon name="brands:google" className="size-4" /> Agregar de Google Fonts
           </p>
@@ -192,14 +200,25 @@ export function FontsSection() {
                 <option key={f} value={f} />
               ))}
             </datalist>
-            <button type="submit" className="btn-primary min-h-11 shrink-0 px-4 text-sm" disabled={busy !== null || !google.trim()}>
+            <button type="submit" className="btn-primary shrink-0" disabled={busy !== null || !google.trim()}>
               {busy === "google" ? <Spinner label="Buscando" /> : <Icon name="plus" className="size-4" />} Agregar
             </button>
           </div>
-          <p className="mt-2 text-xs muted">Se comprueba que exista en fonts.google.com. Los visitantes la descargan desde los servidores de Google.</p>
+          <label className="mt-3 flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={hosted}
+              onChange={(e) => setHosted(e.target.checked)}
+              className="mt-0.5 size-5 shrink-0 accent-[var(--color-azul)]"
+            />
+            <span>
+              <strong>Importar y alojar en buscaDR</strong> (recomendado): se descarga una vez y se sirve desde tu dominio, más rápido y sin enviar datos de
+              visitantes a Google. Sin marcar, se enlaza desde fonts.google.com.
+            </span>
+          </label>
         </form>
 
-        <div className="rounded-xl p-4 ring-1 ring-black/10">
+        <div className="rounded-xl p-4 ring-1 ring-tinta/10">
           <p className="flex items-center gap-2 font-semibold">
             <Icon name="upload" className="size-4" /> Subir desde tu computadora
           </p>
@@ -214,12 +233,20 @@ export function FontsSection() {
             maxLength={40}
             onChange={(e) => setUploadFamily(e.target.value)}
           />
-          <label className={`btn-outline mt-3 min-h-11 w-full cursor-pointer px-4 text-sm ${busy ? "pointer-events-none opacity-60" : ""}`}>
+          <label className={`btn-outline mt-3 w-full cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`}>
             {busy === "upload" ? <Spinner label="Subiendo" /> : <Icon name="upload" className="size-4" />}
             {busy === "upload" ? "Subiendo…" : "Elegir archivos (.woff2, .woff, .ttf, .otf)"}
-            <input type="file" className="sr-only" accept=".woff2,.woff,.ttf,.otf" multiple onChange={(e) => upload(e.target.files).finally(() => (e.target.value = ""))} />
+            <input
+              type="file"
+              className="sr-only"
+              accept=".woff2,.woff,.ttf,.otf"
+              multiple
+              onChange={(e) => upload(e.target.files).finally(() => (e.target.value = ""))}
+            />
           </label>
-          <p className="mt-2 text-xs muted">Hasta 3 MB por archivo. El peso (Regular, Bold…) se detecta del nombre del archivo. Usa solo fuentes con licencia web.</p>
+          <p className="mt-2 text-xs muted">
+            Hasta 3 MB por archivo. El peso (Regular, Bold…) se detecta del nombre del archivo. Usa solo fuentes con licencia web.
+          </p>
         </div>
       </div>
       {error && (
@@ -235,18 +262,22 @@ export function FontsSection() {
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   {f.family}
-                  <span className="chip bg-white px-2 py-0.5 text-xs ring-1 ring-black/10">
-                    {f.source === "google" ? `Google Fonts${f.weights ? ` · ${f.weights.split(";").length} pesos` : ""}` : `${f.files.length} archivo(s)`}
+                  <span className="chip bg-white px-2 py-0.5 text-xs ring-1 ring-tinta/10">
+                    {f.source === "google"
+                      ? f.files.length
+                        ? `Google Fonts · alojada (${f.files.length} archivo(s))`
+                        : `Google Fonts · enlazada${f.weights ? ` · ${f.weights.split(";").length} pesos` : ""}`
+                      : `${f.files.length} archivo(s) subidos`}
                   </span>
                   {(config.theme.font === f.family || config.theme.bodyFont === f.family) && (
-                    <span className="chip bg-morado px-2 py-0.5 text-xs text-white">En uso</span>
+                    <span className="chip bg-azul px-2 py-0.5 text-xs text-white">En uso</span>
                   )}
                 </p>
                 <p className="mt-1 truncate text-xl" style={{ fontFamily: `"${f.family}", ui-sans-serif` }}>
                   {SAMPLE}
                 </p>
               </div>
-              <button type="button" className="btn-ghost min-h-10 shrink-0 px-3 text-sm" onClick={() => remove(f.family)}>
+              <button type="button" className="btn-ghost btn-sm shrink-0" onClick={() => remove(f.family)}>
                 <Icon name="trash" className="size-4" /> Quitar
               </button>
             </li>

@@ -66,10 +66,7 @@ export async function getImage(env: Env, key: string): Promise<{ body: BodyInit;
 
 /** Elimina una imagen concreta (por clave), esté en D1 o en R2. */
 export async function deleteImage(env: Env, key: string) {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM media_chunks WHERE key=?").bind(key),
-    env.DB.prepare("DELETE FROM media_objects WHERE key=?").bind(key),
-  ]);
+  await env.DB.batch([env.DB.prepare("DELETE FROM media_chunks WHERE key=?").bind(key), env.DB.prepare("DELETE FROM media_objects WHERE key=?").bind(key)]);
   if (env.MEDIA) await env.MEDIA.delete(key);
 }
 

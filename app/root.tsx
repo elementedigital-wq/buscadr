@@ -2,19 +2,20 @@ import { useEffect } from "react";
 import { Links, Meta, Outlet, Scripts, ScrollRestoration, isRouteErrorResponse, useLocation, useRouteLoaderData } from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
+import { IconLibraryContext } from "./components/Icon";
 import { serverApiSafe } from "./lib/api.server";
 import { notifyPreviewNavigation, startPreviewBridge, usePreviewCms } from "./lib/cms-preview";
 import { fontAssets, themeStyle } from "./lib/theme";
-import type { Cms, SessionUser } from "./lib/types";
+import type { Catalog, Cms, SessionUser } from "./lib/types";
 
 export async function loader({ request, context }: Route.LoaderArgs) {
   const [me, config, google, catalog] = await Promise.all([
     serverApiSafe<{ user: SessionUser | null }>(context, request, "/api/auth/me", { user: null }),
     serverApiSafe<{ config: Cms | null }>(context, request, "/api/public/config", { config: null }),
     serverApiSafe<{ enabled: boolean; clientId: string | null }>(context, request, "/api/auth/google/config", { enabled: false, clientId: null }),
-    serverApiSafe<{ fees: { owner_bps: number; renter_bps: number } }>(context, request, "/api/catalog", { fees: { owner_bps: 1500, renter_bps: 1000 } }),
+    serverApiSafe<Catalog>(context, request, "/api/catalog", { specialties: [], cities: [], plans: [], fee_bps: 800, payments: "sandbox" }),
   ]);
-  return { user: me.user, cms: config.config, google, fees: catalog.fees, origin: new URL(request.url).origin };
+  return { user: me.user, cms: config.config, google, catalog, origin: new URL(request.url).origin };
 }
 
 export type RootData = Awaited<ReturnType<typeof loader>>;
@@ -25,9 +26,6 @@ export const useRootData = () => {
   const preview = usePreviewCms();
   return preview && data ? { ...data, cms: preview } : data;
 };
-
-/** Enlaces de la v0.3 (rutas #/…) se redirigen a las rutas nuevas sin romper marcadores ni QR impresos. */
-const LEGACY_HASH = `(function(){var m={inicio:'/',explorar:'/explorar',mapa:'/explorar?vista=mapa',detalle:'/explorar',reservas:'/reservas',mensajes:'/reservas',publicar:'/publicar',favoritos:'/favoritos',panel:'/panel',cuenta:'/cuenta',ayuda:'/como-funciona'};var h=location.hash.replace(/^#\\/?/,'').split(/[/?]/)[0];if(m[h]&&(location.pathname==='/'||location.pathname==='/index.html')){location.replace(m[h]);}})();`;
 
 export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", href: "/assets/app-icon-192.png" },
@@ -43,7 +41,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content={theme?.primary ?? "#5F4489"} />
+        <meta name="theme-color" content={theme?.primary ?? "#0F62FE"} />
         <link rel="icon" href={theme?.favicon || "/assets/buscadr-isotipo.png"} />
         {fonts.links.length > 0 && <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />}
         {fonts.links.map((href) => (
@@ -53,11 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {fonts.css && <style dangerouslySetInnerHTML={{ __html: fonts.css }} />}
         <Meta />
         <Links />
-        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: script estático sin datos de usuario */}
-        <script dangerouslySetInnerHTML={{ __html: LEGACY_HASH }} />
       </head>
       <body className="min-h-dvh">
-        {children}
+        <IconLibraryContext.Provider value={theme?.iconLibrary ?? {}}>{children}</IconLibraryContext.Provider>
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -86,7 +82,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   return (
     <main className="container-page grid min-h-[70dvh] place-items-center text-center">
       <div>
-        <img src="/assets/buscadr-logo.png" alt="buscaDR" className="mx-auto h-10 w-auto" width={157} height={40} />
+        <img src="/assets/buscadr-logo.png" alt="buscaDR" className="mx-auto h-12 w-auto" width={144} height={48} />
         <h1 className="mt-6 text-3xl font-extrabold">{title}</h1>
         <p className="mt-2 muted">{details}</p>
         <a href="/" className="btn-primary mt-6">

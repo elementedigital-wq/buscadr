@@ -123,7 +123,15 @@ export function Icon({ name, className = "size-5", label }: { name: string; clas
  * Ícono editable desde el CMS: nombre del catálogo o de la librería (glifo) o ruta de imagen subida
  * (/api/media/…, /assets/…).
  */
-export function CmsIcon({ value, className = "size-6", fallback = "stethoscope" }: { value: string | null | undefined; className?: string; fallback?: string }) {
+export function CmsIcon({
+  value,
+  className = "size-6",
+  fallback = "stethoscope",
+}: {
+  value: string | null | undefined;
+  className?: string;
+  fallback?: string;
+}) {
   if (value && /^(\/|https:)/.test(value)) return <img src={value} alt="" className={`${className} object-contain`} loading="lazy" />;
   return <Icon name={value || fallback} className={className} />;
 }

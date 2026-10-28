@@ -63,7 +63,16 @@ export const paymentEvent = (db: D1Database, id: string, type: string, detail: R
 export async function createPayment(
   db: D1Database,
   env: Env,
-  p: { kind: "cita" | "plan"; appointment_id?: number | null; plan?: string | null; payer_id: string; practitioner_id: number | null; amount_cents: number; fee_cents: number; net_cents: number },
+  p: {
+    kind: "cita" | "plan";
+    appointment_id?: number | null;
+    plan?: string | null;
+    payer_id: string;
+    practitioner_id: number | null;
+    amount_cents: number;
+    fee_cents: number;
+    net_cents: number;
+  },
 ) {
   const id = crypto.randomUUID();
   const provider = activeProvider(env);
@@ -104,7 +113,12 @@ export async function startCheckout(env: Env, payment: PaymentRow, origin: strin
     }),
     signal: AbortSignal.timeout(10_000),
   }).catch(() => null);
-  const data = (await res?.json().catch(() => null)) as { paymentId?: string | number; payWithCard?: string; payWithPayPhone?: string; message?: string } | null;
+  const data = (await res?.json().catch(() => null)) as {
+    paymentId?: string | number;
+    payWithCard?: string;
+    payWithPayPhone?: string;
+    message?: string;
+  } | null;
   if (!res?.ok || !data?.payWithCard) {
     await env.DB.batch([
       env.DB.prepare("UPDATE payments SET status='rechazado',error=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('creado','pendiente')").bind(
@@ -116,7 +130,10 @@ export async function startCheckout(env: Env, payment: PaymentRow, origin: strin
     return null;
   }
   await env.DB.batch([
-    env.DB.prepare("UPDATE payments SET status='pendiente',provider_ref=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(String(data.paymentId ?? ""), payment.id),
+    env.DB.prepare("UPDATE payments SET status='pendiente',provider_ref=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(
+      String(data.paymentId ?? ""),
+      payment.id,
+    ),
     paymentEvent(env.DB, payment.id, "payphone_preparado", {}),
   ]);
   return { url: data.payWithCard };
@@ -150,8 +167,19 @@ export async function confirmPayphone(env: Env, payment: PaymentRow, transaction
   const sameTx = data.clientTransactionId === clientTxIdOf(payment.id);
   const sameAmount = Number(data.amount) === payment.amount_cents;
   const approved = data.statusCode === 3 && String(data.transactionStatus).toLowerCase() === "approved" && sameTx && sameAmount;
-  if (approved) return { approved, status: "aprobado", brand: data.cardBrand ?? "", last4: String(data.lastDigits ?? "").slice(-4), authorization: data.authorizationCode ?? "" };
-  return { approved: false, status: data.statusCode === 2 ? "cancelado" : "rechazado", error: !sameTx || !sameAmount ? "La respuesta del proveedor no coincide con la transacción" : (data.message ?? "Pago no aprobado") };
+  if (approved)
+    return {
+      approved,
+      status: "aprobado",
+      brand: data.cardBrand ?? "",
+      last4: String(data.lastDigits ?? "").slice(-4),
+      authorization: data.authorizationCode ?? "",
+    };
+  return {
+    approved: false,
+    status: data.statusCode === 2 ? "cancelado" : "rechazado",
+    error: !sameTx || !sameAmount ? "La respuesta del proveedor no coincide con la transacción" : (data.message ?? "Pago no aprobado"),
+  };
 }
 
 /** Reverso/reembolso. Sandbox: inmediato. Payphone: reverso por clientTransactionId. */

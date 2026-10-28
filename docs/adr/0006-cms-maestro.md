@@ -1,7 +1,7 @@
-# ADR 0006 — CMS Maestro integrado (igual que YANK) con imágenes en D1
+# ADR 0006 — CMS Maestro integrado con borrador, publicación y vista previa
 
-**Estado:** aceptada (26-oct-2026)
+**Estado:** aceptada (28-oct-2026). El acceso se detalla en la ADR 0008.
 
-**Decisión.** Portar el CMS de YANK: configuración JSON saneada por lista blanca con borrador, publicación versionada e historial; vista previa en vivo por `postMessage` del mismo origen con clic para editar; biblioteca de imágenes comprimidas en el navegador y guardadas en D1 (R2 opcional). Acceso solo para la cuenta de `BUSCADR_ADMIN_EMAIL` con la contraseña del secreto `BUSCADR_ADMIN_PASSWORD`. Sección adicional «Anuncios» (portada, frase y destacado) en lugar de «Profesionales».
+**Decisión.** `/maestro` edita un documento JSON validado por lista blanca (`server/cms/model.ts`, ≤ 400 KB, sin HTML, CSS ni scripts): marca y colores, tipografías, íconos, portada, banners, textos y botones, componentes, especialidades (nombre, ícono, tono, orden, visibilidad), ajustes por profesional (foto, frase, «Destacado»), SEO, permisos de cuentas y moderación de opiniones. Flujo borrador → publicar con historial de versiones y auditoría. La vista previa carga el sitio real en un iframe y recibe el borrador por `postMessage` (mismo origen); un clic en un elemento con `data-cms` lleva a su campo. El CMS avisa de afirmaciones prohibidas y de contraste insuficiente (WCAG AA). El aviso de emergencias y la etiqueta «Perfil de muestra» no se pueden desactivar.
 
-**Consecuencias.** Marketing edita sin desarrollo ni despliegues; el CMS no puede alterar precios, reseñas ni ocultar etiquetas de muestra.
+**Consecuencias.** El propietario cambia contenido y estilo sin desarrollo y sin riesgo de inyectar código.

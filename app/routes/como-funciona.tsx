@@ -1,161 +1,162 @@
 import { Link } from "react-router";
-import { CATEGORIES } from "../../server/lib/catalog";
 import { Icon } from "../components/Icon";
-import { PageHeader } from "../components/ui";
+import { PageHeader, TONE_CLASS } from "../components/ui";
 import { pct } from "../lib/format";
 import { useRootData } from "../root";
 import type { Route } from "./+types/como-funciona";
 
 export const meta: Route.MetaFunction = () => [
-  { title: "Cómo funciona buscaDR · Alquiler de herramientas y equipos" },
+  { title: "Cómo funciona buscaDR · Citas médicas presenciales y virtuales" },
   {
     name: "description",
     content:
-      "Cómo alquilar y publicar en buscaDR: precio total antes de reservar, entrega con código y fotos, comisiones claras, equipos admitidos y reglas del piloto en Guayaquil, Samborondón y Daule.",
+      "Cómo reservar en buscaDR: busca por especialidad, compara tarifas presenciales y virtuales, elige un horario, el profesional confirma y recibes avisos por WhatsApp. Pagos protegidos y cancelación clara.",
   },
 ];
 
+const STEPS = [
+  ["search", "azul", "Busca", "Por especialidad, síntoma, nombre o ciudad. Filtra por modalidad presencial o virtual y compara tarifas."],
+  ["calendar", "verde", "Elige horario", "La agenda muestra solo horarios libres del profesional. Escoges día, hora y modalidad."],
+  ["check-circle", "cielo", "El profesional confirma", "Recibe tu solicitud en su panel y por WhatsApp. Te avisamos al instante cuando la confirma."],
+  ["video", "azul", "Atiéndete", "Acude al consultorio con tu código de llegada o entra a la videoconsulta desde tu cita."],
+] as const;
+
 const CANCEL = [
-  ["Antes de que el propietario acepte", "Sin costo para quien alquila."],
-  ["Con anticipación", "Devolución alta o total según la política publicada (en revisión legal)."],
-  ["Muy cerca del retiro", "Retención limitada solo si hay un costo demostrado y un término claro."],
-  ["El propietario cancela", "Reembolso íntegro, revisión de su reputación y búsqueda de alternativa."],
-  ["El equipo no coincide o está defectuoso", "Reembolso y expediente con evidencia."],
-  ["Incidente disputado", "Mediación con plazos, revisión de evidencia y derecho de réplica."],
+  ["Antes de que el profesional confirme", "Sin costo. Si pagaste en línea, se reembolsa completo."],
+  ["Hasta 4 horas antes de la cita", "Cancelación gratuita y reembolso íntegro del pago en línea."],
+  ["Menos de 4 horas antes", "Se puede cancelar, pero el pago en línea no se reembolsa automáticamente."],
+  ["El profesional rechaza o cancela", "Reembolso íntegro y aviso inmediato para que reserves otro horario."],
+  ["La solicitud no se confirma a tiempo", "Expira sola (24 h o 1 h antes de la cita) y se libera el pago."],
 ];
 
 export default function ComoFunciona() {
   const root = useRootData();
-  const fees = root?.fees ?? { owner_bps: 1500, renter_bps: 1000 };
+  const fee = root?.catalog.fee_bps ?? 800;
   return (
-    <div className="container-page max-w-4xl">
+    <div className="container-page max-w-4xl pt-6 sm:pt-8">
       <PageHeader eyebrow="Guía" title="Cómo funciona buscaDR">
-        Alquila herramientas y equipos cerca de ti, por horas o días, o publica los tuyos y genera ingresos. Con condiciones claras y un proceso de entrega y
-        devolución verificable.
+        Encuentra médicos, especialistas, clínicas y servicios de salud en Ecuador. Reserva en minutos, con tarifas claras y confirmación del profesional.
       </PageHeader>
 
-      <section id="piloto" className="card scroll-mt-24 p-6">
-        <h2 className="text-2xl font-extrabold">Qué significa «piloto»</h2>
-        <ul className="mt-3 space-y-2">
-          <li>• Operamos solo en Guayaquil, Samborondón y Daule, con un catálogo de equipos portátiles de riesgo controlado.</li>
-          <li>
-            • <strong>buscaDR aún no procesa pagos.</strong> Ves el desglose completo (alquiler, tarifa de servicio, entrega y garantía) y el pago se coordina
-            entre las partes al retirar. La integración con una pasarela autorizada en Ecuador está en preparación.
+      <ol className="grid gap-3 sm:grid-cols-2">
+        {STEPS.map(([icon, tone, title, text], i) => (
+          <li key={title} className="card flex gap-4 p-5">
+            <span className={`grid size-12 shrink-0 place-items-center rounded-2xl ${TONE_CLASS[tone]}`}>
+              <Icon name={icon} className="size-6" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide muted">Paso {i + 1}</p>
+              <h2 className="text-lg font-extrabold">{title}</h2>
+              <p className="text-sm muted">{text}</p>
+            </div>
           </li>
-          <li>• Los anuncios rotulados «Anuncio de muestra» son ilustrativos para conocer el flujo; no corresponden a equipos reales.</li>
-          <li>• Términos, privacidad y políticas de cancelación están en revisión legal. Al registrarte aceptas las condiciones del piloto.</li>
-        </ul>
-      </section>
+        ))}
+      </ol>
 
-      <section className="mt-6 grid gap-4 md:grid-cols-2">
+      <section className="mt-8 grid gap-4 sm:grid-cols-2">
         <div className="card p-6">
-          <h2 className="text-xl font-extrabold">Si alquilas</h2>
-          <ol className="mt-3 space-y-3 text-sm">
-            {[
-              ["search", "Busca por qué, dónde y cuándo. Solo ves equipos libres en tus fechas, con el total."],
-              ["calendar", "Solicita la reserva. Si el anuncio tiene reserva inmediata, se confirma al instante; si no, el propietario tiene 24 h."],
-              ["chat", "Coordina el retiro o la entrega por el chat de la reserva."],
-              ["key", "Al recibir el equipo revisan juntos, toman fotos y dictas tu código de entrega."],
-              ["repeat", "Al devolverlo, el propietario te dicta el código de devolución. Luego ambos se califican."],
-            ].map(([icon, text]) => (
-              <li key={text} className="flex gap-3">
-                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-lila text-morado">
-                  <Icon name={icon} className="size-5" />
-                </span>
-                <span className="pt-1.5">{text}</span>
-              </li>
-            ))}
-          </ol>
+          <h2 className="flex items-center gap-2 text-xl font-extrabold">
+            <Icon name="clinic" className="size-5 text-azul" /> Cita presencial
+          </h2>
+          <p className="mt-2 text-sm muted">
+            La dirección exacta del consultorio se muestra al confirmarse la cita. En el perfil verás el sector aproximado. Paga en el consultorio o en línea,
+            según lo que acepte el profesional.
+          </p>
         </div>
-        <div id="propietarios" className="card scroll-mt-24 p-6">
-          <h2 className="text-xl font-extrabold">Si publicas</h2>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li>• Publicar es gratis. Tú defines precio por hora, día o semana, mínimo de alquiler, garantía y reglas.</li>
-            <li>
-              • Comisión buscaDR: <strong>{pct(fees.owner_bps)}</strong> del alquiler, solo cuando se completa. Quien alquila paga una tarifa de servicio de{" "}
-              <strong>{pct(fees.renter_bps)}</strong>. Antes de aceptar ves exactamente cuánto recibes.
-            </li>
-            <li>• La garantía es reembolsable, va aparte y no es ingreso de buscaDR.</li>
-            <li>• Bloquea fechas, define un margen entre alquileres y pausa tus anuncios cuando quieras.</li>
-            <li>• Acepta o rechaza solicitudes desde WhatsApp con un botón (si activas los avisos).</li>
-          </ul>
-          <Link to="/publicar" className="btn-primary mt-4">
-            Publicar un equipo
-          </Link>
+        <div className="card p-6">
+          <h2 className="flex items-center gap-2 text-xl font-extrabold">
+            <Icon name="video" className="size-5 text-azul" /> Cita virtual
+          </h2>
+          <p className="mt-2 text-sm muted">
+            Tiene su propia tarifa. Se paga en línea para asegurar el horario y la sala de video se abre 15 minutos antes, desde tu cita en buscaDR. Solo
+            necesitas un navegador.
+          </p>
         </div>
       </section>
 
-      <section id="seguridad" className="card mt-6 scroll-mt-24 p-6">
-        <h2 className="text-2xl font-extrabold">Confianza y seguridad</h2>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          {[
-            ["Anuncios revisados", "Cada equipo pasa una revisión manual (fotos reales, estado, reglas y categoría permitida) antes de publicarse."],
-            ["Entrega con evidencia", "Código de 6 dígitos, fotos y checklist del estado al retirar y al devolver, con fecha y hora."],
-            ["Datos protegidos", "Ubicación pública aproximada (~1 km). Teléfonos y direcciones se comparten solo con reservas confirmadas."],
-            ["Reseñas reales", "Solo califican quienes completaron un alquiler en buscaDR. Las reseñas se moderan."],
-            ["Mediación", "Si algo sale mal, reportas desde la reserva. Ningún cargo por daños se aplica automáticamente: hay evidencia y derecho de réplica."],
-            [
-              "Uso responsable",
-              "Mayores de 18 años. Equipos de riesgo medio requieren leer reglas y pedir demostración. Ante una emergencia, llama al ECU 911.",
-            ],
-          ].map(([t, d]) => (
-            <div key={t} className="rounded-2xl bg-fondo p-4">
-              <p className="font-display font-bold">{t}</p>
-              <p className="mt-1 text-sm muted">{d}</p>
+      <section id="pagos" className="card mt-8 scroll-mt-24 p-6">
+        <h2 className="text-2xl font-extrabold">Pagos con buscaDR Pay</h2>
+        <ul className="mt-3 space-y-2 text-sm">
+          <li className="flex gap-2">
+            <Icon name="lock" className="mt-0.5 size-4 shrink-0 text-azul" /> Cada transacción queda registrada en tu cita y en el historial de pagos. buscaDR
+            no guarda los datos completos de tu tarjeta.
+          </li>
+          <li className="flex gap-2">
+            <Icon name="receipt" className="mt-0.5 size-4 shrink-0 text-azul" /> El paciente paga la tarifa publicada; no hay recargos ocultos. buscaDR cobra al
+            profesional una comisión de {pct(fee)} solo en citas pagadas en línea.
+          </li>
+          <li className="flex gap-2">
+            <Icon name="repeat" className="mt-0.5 size-4 shrink-0 text-azul" /> Si el profesional rechaza o la cita expira, el reembolso es automático.
+          </li>
+        </ul>
+        {root?.catalog.payments === "sandbox" && (
+          <p className="mt-3 rounded-xl bg-amarillo/15 p-3 text-sm">
+            Durante el piloto los pagos en línea funcionan en modo de prueba: no se cobra dinero real.
+          </p>
+        )}
+      </section>
+
+      <section id="cancelacion" className="mt-8 scroll-mt-24">
+        <h2 className="text-2xl font-extrabold">Cancelaciones y reembolsos</h2>
+        <dl className="card mt-3 divide-y divide-tinta/5">
+          {CANCEL.map(([k, v]) => (
+            <div key={k} className="grid gap-1 p-4 sm:grid-cols-[16rem_minmax(0,1fr)] sm:gap-4">
+              <dt className="font-semibold">{k}</dt>
+              <dd className="text-sm muted">{v}</dd>
             </div>
           ))}
-        </div>
-        <p className="mt-4 text-xs muted">
-          buscaDR no afirma validar la competencia técnica de los usuarios ni ofrece seguros propios. La protección por daños se ofrecerá solo con una aseguradora
-          autorizada.
+        </dl>
+      </section>
+
+      <section id="whatsapp" className="card mt-8 scroll-mt-24 p-6">
+        <h2 className="flex items-center gap-2 text-2xl font-extrabold">
+          <Icon name="whatsapp" className="size-6 text-verde-ink" /> Avisos por WhatsApp
+        </h2>
+        <p className="mt-2 text-sm muted">
+          Si lo autorizas, recibes la confirmación, los cambios y recordatorios 24 h y 1 h antes. Los profesionales reciben cada solicitud con botones para
+          confirmar o rechazar sin abrir la app. Puedes retirar el consentimiento cuando quieras desde{" "}
+          <Link to="/cuenta#whatsapp" className="font-semibold text-azul underline">
+            Mi cuenta
+          </Link>
+          .
         </p>
       </section>
 
-      <section className="card mt-6 p-6">
-        <h2 className="text-2xl font-extrabold">Cancelaciones (propuesta del piloto)</h2>
-        <table className="mt-3 w-full text-left text-sm">
-          <tbody className="divide-y divide-black/5">
-            {CANCEL.map(([when, what]) => (
-              <tr key={when}>
-                <th scope="row" className="py-2 pr-4 font-semibold">
-                  {when}
-                </th>
-                <td className="py-2 muted">{what}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      <section id="prohibidos" className="card mt-6 scroll-mt-24 p-6">
-        <h2 className="text-2xl font-extrabold">Qué se puede publicar</h2>
-        <p className="mt-2 text-sm">Categorías del piloto:</p>
-        <ul className="mt-2 flex flex-wrap gap-2">
-          {CATEGORIES.filter((c) => c.enabled).map((c) => (
-            <li key={c.slug} className="chip bg-lila text-morado">
-              {c.name}
-            </li>
-          ))}
+      <section id="confianza" className="card mt-8 scroll-mt-24 p-6">
+        <h2 className="text-2xl font-extrabold">Confianza y transparencia</h2>
+        <ul className="mt-3 space-y-2 text-sm">
+          <li>• El sello «Verificado» aparece solo cuando buscaDR revisó el registro profesional en fuentes oficiales.</li>
+          <li>• Las opiniones solo las escriben pacientes con una cita completada, una por cita.</li>
+          <li>• Los «perfiles de muestra» ilustran la plataforma: están marcados y no atienden pacientes reales.</li>
+          <li>• Los profesionales destacados se señalan como tales; la verificación y las opiniones nunca se compran.</li>
         </ul>
-        <p className="mt-4 text-sm font-semibold">No se admiten en el piloto:</p>
-        <p className="mt-1 text-sm muted">
-          Armas, munición, explosivos o pirotecnia; maquinaria pesada o de elevación (montacargas, andamios, elevadores); motosierras y máquinas de corte de
-          alto riesgo; equipos sin propiedad demostrable, defectuosos, con baterías comprometidas o sin manual; y equipos que exijan certificación no
-          verificada. Los electrodomésticos llegan en una fase posterior.
-        </p>
       </section>
 
-      <section className="card mt-6 p-6">
-        <h2 className="text-2xl font-extrabold">WhatsApp</h2>
-        <p className="mt-2 text-sm">
-          Con tu autorización, buscaDR te escribe desde su número oficial: solicitudes con botones para aceptar o rechazar, confirmaciones y recordatorios. También
-          puedes escribir lo que necesitas («proyector en Samborondón») o enviar la foto de un equipo para crear el borrador del anuncio. WhatsApp conecta
-          contigo y buscaDR; los datos de la otra parte se comparten solo al confirmar.
-        </p>
-        <Link to="/cuenta#whatsapp" className="btn-outline mt-4">
-          Activar avisos
+      <Notice />
+
+      <div className="my-10 flex flex-wrap gap-3">
+        <Link to="/buscar" className="btn-primary">
+          <Icon name="search" className="size-4" /> Buscar profesional
         </Link>
-      </section>
+        <Link to="/para-profesionales" className="btn-outline">
+          Soy profesional de la salud
+        </Link>
+      </div>
     </div>
+  );
+}
+
+function Notice() {
+  return (
+    <p className="mt-8 flex gap-3 rounded-2xl bg-alerta/5 p-4 text-sm ring-1 ring-alerta/20">
+      <Icon name="alert" className="mt-0.5 size-5 shrink-0 text-alerta-ink" />
+      <span>
+        <strong>buscaDR no atiende emergencias.</strong> Ante una emergencia llama al{" "}
+        <a href="tel:911" className="font-bold underline">
+          911
+        </a>{" "}
+        o acude al servicio de urgencias más cercano.
+      </span>
+    </p>
   );
 }

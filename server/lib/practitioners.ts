@@ -115,7 +115,9 @@ export async function reputationFor(db: D1Database, ids: number[]): Promise<Map<
   const marks = ids.map(() => "?").join(",");
   const [reviews, patients] = await Promise.all([
     db
-      .prepare(`SELECT practitioner_id AS id, AVG(rating) AS rating, COUNT(*) AS n FROM reviews WHERE hidden=0 AND practitioner_id IN (${marks}) GROUP BY practitioner_id`)
+      .prepare(
+        `SELECT practitioner_id AS id, AVG(rating) AS rating, COUNT(*) AS n FROM reviews WHERE hidden=0 AND practitioner_id IN (${marks}) GROUP BY practitioner_id`,
+      )
       .bind(...ids)
       .all<{ id: number; rating: number; n: number }>(),
     db
@@ -133,7 +135,10 @@ export async function reputationFor(db: D1Database, ids: number[]): Promise<Map<
 
 /** Nombre público de un paciente frente al profesional antes de la cita: nombre y primera inicial. */
 export function patientShortName(name: string | null | undefined) {
-  const parts = String(name ?? "").trim().split(/\s+/).filter(Boolean);
+  const parts = String(name ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (!parts.length) return "Paciente";
   return parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : parts[0];
 }

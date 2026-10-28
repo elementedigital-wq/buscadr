@@ -156,7 +156,9 @@ cms.post("/reviews/:id/visibility", async (c) => {
   const id = Number(c.req.param("id"));
   const data = await c.req.json<{ hidden: unknown }>();
   if (typeof data.hidden !== "boolean") fail(400, "Valor de moderación inválido");
-  const res = await c.env.DB.prepare("UPDATE reviews SET hidden=? WHERE id=?").bind(data.hidden ? 1 : 0, id).run();
+  const res = await c.env.DB.prepare("UPDATE reviews SET hidden=? WHERE id=?")
+    .bind(data.hidden ? 1 : 0, id)
+    .run();
   if (!res.meta.changes) fail(404, "Opinión no encontrada");
   await audit(c.env.DB, c.get("user")!, "moderate_review", { id, hidden: data.hidden });
   return c.json({ ok: true });

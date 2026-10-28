@@ -1,30 +1,27 @@
-# Afirmaciones permitidas en piezas públicas (piloto)
+# Afirmaciones permitidas en piezas públicas
 
-El CMS avisa automáticamente cuando un texto usa una afirmación prohibida (`app/components/maestro/model.ts`).
+El CMS avisa automáticamente cuando un texto usa una afirmación prohibida (`app/components/maestro/model.ts`). En salud, la regla es: **nada que prometa resultados clínicos, rapidez de atención o una revisión que no ocurrió**.
 
-## Prohibido mientras sea piloto
+## Prohibido
 
 | No decir | Por qué | Alternativa |
 |---|---|---|
-| «Verificado», «certificado» | No hay KYC ni inspección técnica | «Anuncio revisado por el equipo buscaDR» |
-| «Garantizado», «garantía total», «asegurado», «sin riesgo» | No hay seguro ni garantía de buscaDR | «Garantía reembolsable acordada con el propietario» |
-| «Pagos seguros/protegidos» | No se procesan pagos | «El pago se coordina al retirar; en el piloto no se cobra en buscaDR» |
-| «24/7», «siempre estamos» | Soporte en horario de oficina | «Soporte por WhatsApp» |
-| «En minutos», «al instante», «tiempo real» | Depende del propietario | «Reserva inmediata en los anuncios que la activan» |
-| «Miles de herramientas» | Oferta inicial limitada | «Equipos cerca de ti en Guayaquil, Samborondón y Daule» |
+| «El mejor médico», «los mejores especialistas» | No es demostrable y la verificación no es un ranking | «Profesionales con perfil revisado por buscaDR» |
+| «Garantizado», «resultados asegurados», «sin riesgo», «cura» | Promesa clínica | «Agenda con el profesional adecuado para tu consulta» |
+| «Diagnóstico en línea / inmediato» | buscaDR no diagnostica | «Consulta virtual con un profesional» |
+| «Atendemos emergencias», «24/7» | No es un servicio de urgencias | «Ante una emergencia llama al 911» (aviso obligatorio en el sitio) |
+| «Verificado» en un perfil sin revisión | Solo aplica con registro profesional revisado en fuentes oficiales | «Perfil en revisión» |
+| «Miles de médicos» | Oferta inicial limitada | «Profesionales en Guayaquil, Samborondón, Daule, Quito y Cuenca» |
 | «Descárgala en App Store / Google Play» | Es una web instalable (PWA) | «Instálala desde el navegador» |
-
-## Correcciones al Brand Deck
-
-El Brand Deck incluye piezas de referencia con datos de otros mercados. **No usar** en Ecuador:
-
-- Precios en **euros (€)**: buscaDR cobra en **USD**.
-- Ubicaciones **Madrid, CABA, México** u otras ciudades: el piloto es Guayaquil, Samborondón y Daule.
-- Fotos de producto con textos o precios incrustados: usar las fotos limpias de `public/assets/fotos/`.
-- Reseñas, cifras de usuarios o calificaciones de ejemplo: solo datos reales.
 
 ## Siempre
 
-- Etiquetar «Anuncio de muestra» y «Destacado».
-- Mostrar el total estimado (alquiler + tarifa de servicio) y la garantía por separado.
-- Ubicación aproximada en público; la exacta solo con reserva confirmada.
+- Etiquetar «Perfil de muestra» y «Destacado». Los perfiles de muestra no tienen registro profesional ni opiniones.
+- Mostrar la tarifa presencial y la virtual antes de reservar; la comisión de buscaDR no se suma al paciente.
+- Ubicación aproximada en público; dirección exacta y contacto solo con la cita confirmada.
+- Opiniones solo de pacientes con cita completada; ocultarlas deja constancia.
+- Durante el piloto, decir «pago de prueba» mientras buscaDR Pay esté en modo sandbox.
+
+## Correcciones al Brand Deck
+
+El Brand Deck incluye maquetas con datos ilustrativos: no usar reseñas, calificaciones, cantidades de pacientes ni precios de ejemplo como si fueran reales. Usar las fotos limpias de `public/assets/fotos/` y `public/assets/medicos/` (retratos ilustrativos, siempre en perfiles de muestra).

@@ -38,7 +38,7 @@ export const GROUPS = {
     "check", "circle-check", "xmark", "circle-xmark", "arrow-right", "arrow-left", "chevron-right", "chevron-left", "chevron-down",
     "share-nodes", "pen-to-square", "eye", "eye-slash", "pause", "play", "flag", "list", "table-cells-large", "circle-info",
     "triangle-exclamation", "circle-question", "right-from-bracket", "arrows-rotate", "image", "images", "upload", "download", "phone",
-    "envelope", "link", "copy", "qrcode", "box-open", "fire", "bars", "ellipsis", "house-user", "grip", "font", "paper-plane", "comment-dots", "regular:comment-dots",
+    "envelope", "link", "copy", "qrcode", "box-open", "fire", "bars", "ellipsis", "house-user", "grip", "font", "palette", "paper-plane", "comment-dots", "regular:comment-dots",
     "lock-open", "arrow-up-right-from-square", "circle-dot", "street-view", "house", "star", "star-half-stroke", "camera", "chevron-up",
     "circle-plus", "rotate", "print", "globe", "user-plus", "user-pen", "wand-magic-sparkles", "gift", "money-bill",
   ],

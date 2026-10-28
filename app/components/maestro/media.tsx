@@ -112,7 +112,7 @@ function Picker({ onPick, onClose }: { onPick: (url: string) => void; onClose: (
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-tinta/50 p-4" role="dialog" aria-modal="true" aria-label="Elegir imagen">
       <div className="flex max-h-[85dvh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center gap-2 border-b border-black/5 p-4">
+        <div className="flex items-center gap-2 border-b border-tinta/5 p-4">
           <h2 className="text-lg font-bold">Elegir imagen</h2>
           <div className="ml-4 flex gap-1 rounded-full bg-fondo p-1 text-sm">
             {(["subidas", "marca"] as const).map((t) => (
@@ -141,7 +141,7 @@ function Picker({ onPick, onClose }: { onPick: (url: string) => void; onClose: (
               {items.map((it) => (
                 <li key={it.url}>
                   <button type="button" onClick={() => onPick(it.url)} className="group w-full text-left">
-                    <span className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-fondo ring-1 ring-black/10 group-hover:ring-2 group-hover:ring-morado">
+                    <span className="grid aspect-square place-items-center overflow-hidden rounded-xl bg-fondo ring-1 ring-tinta/10 group-hover:ring-2 group-hover:ring-azul">
                       <img src={it.url} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
                     </span>
                     <span className="mt-1 block truncate text-xs muted">{it.name}</span>
@@ -180,7 +180,7 @@ export function ImageField({
   return (
     <Field path={path} label={label} hint={hint} wide={wide}>
       <div className="flex flex-wrap items-center gap-3">
-        <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-fondo ring-1 ring-black/10">
+        <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-xl bg-fondo ring-1 ring-tinta/10">
           {value ? <img src={value} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-xs muted">Sin imagen</span>}
         </span>
         <div className="flex flex-wrap gap-2">

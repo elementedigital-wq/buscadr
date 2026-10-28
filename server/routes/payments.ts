@@ -45,7 +45,9 @@ payments.get("/:id", async (c) => {
   const user = requireUser(c);
   const db = c.env.DB;
   const pay = await loadPayment(db, c.req.param("id"));
-  const owner = pay.practitioner_id ? await db.prepare("SELECT user_id FROM practitioners WHERE id=?").bind(pay.practitioner_id).first<{ user_id: string }>() : null;
+  const owner = pay.practitioner_id
+    ? await db.prepare("SELECT user_id FROM practitioners WHERE id=?").bind(pay.practitioner_id).first<{ user_id: string }>()
+    : null;
   if (pay.payer_id !== user.id && owner?.user_id !== user.id && !isAdmin(user, c.env)) fail(404, "Pago no encontrado");
   const appt = pay.appointment_id
     ? await db
@@ -84,7 +86,12 @@ payments.post("/:id/checkout", async (c) => {
   const pay = await loadPayment(c.env.DB, c.req.param("id"));
   if (pay.payer_id !== user.id) fail(404, "Pago no encontrado");
   if (!["creado", "pendiente", "rechazado"].includes(pay.status)) fail(409, "Este pago ya no admite cambios");
-  const res = await startCheckout(c.env, pay, new URL(c.req.url).origin, pay.kind === "plan" ? `Plan buscaDR ${pay.plan}` : `Cita buscaDR #${pay.appointment_id}`);
+  const res = await startCheckout(
+    c.env,
+    pay,
+    new URL(c.req.url).origin,
+    pay.kind === "plan" ? `Plan buscaDR ${pay.plan}` : `Cita buscaDR #${pay.appointment_id}`,
+  );
   if (!res) fail(502, "La pasarela no respondió. Intenta de nuevo en unos minutos.");
   return c.json({ url: res.url });
 });
@@ -104,7 +111,14 @@ payments.post("/:id/sandbox", async (c) => {
   if (!d.ok && !d.declined) fail(400, d.error ?? "Revisa los datos de la tarjeta");
   // Solo se guardan marca y últimos 4 dígitos; nunca el número completo ni el CVV.
   await paymentEvent(db, pay.id, "sandbox_intento", { ok: d.ok }).run();
-  const status = await settlePayment(c.env, new URL(c.req.url).origin, pay, d.ok ? { approved: true, status: "aprobado", brand: d.brand, last4: d.last4, authorization: d.authorization } : { approved: false, status: "rechazado", error: d.error });
+  const status = await settlePayment(
+    c.env,
+    new URL(c.req.url).origin,
+    pay,
+    d.ok
+      ? { approved: true, status: "aprobado", brand: d.brand, last4: d.last4, authorization: d.authorization }
+      : { approved: false, status: "rechazado", error: d.error },
+  );
   return c.json({ status, error: d.ok ? null : d.error });
 });
 

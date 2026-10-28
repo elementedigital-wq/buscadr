@@ -1,8 +1,8 @@
 import { Link, redirect } from "react-router";
-import { ListingGrid } from "../components/ListingCard";
+import { PractitionerCard } from "../components/PractitionerCard";
 import { EmptyState, PageHeader } from "../components/ui";
 import { serverApiSafe } from "../lib/api.server";
-import type { PublicListing } from "../lib/types";
+import type { PublicPractitioner } from "../lib/types";
 import { useRootData } from "../root";
 import type { Route } from "./+types/favoritos";
 
@@ -11,7 +11,7 @@ export const meta: Route.MetaFunction = () => [{ title: "Favoritos · buscaDR" }
 export async function loader({ request, context }: Route.LoaderArgs) {
   const me = await serverApiSafe<{ user: unknown }>(context, request, "/api/auth/me", { user: null });
   if (!me.user) throw redirect("/cuenta?next=/favoritos");
-  return serverApiSafe<{ items: PublicListing[] }>(context, request, "/api/me/favorites", { items: [] });
+  return serverApiSafe<{ items: PublicPractitioner[] }>(context, request, "/api/me/favorites", { items: [] });
 }
 
 export default function Favoritos({ loaderData }: Route.ComponentProps) {
@@ -19,20 +19,27 @@ export default function Favoritos({ loaderData }: Route.ComponentProps) {
   return (
     <div className="container-page">
       <PageHeader eyebrow="Tu lista" title="Favoritos">
-        Equipos que guardaste para alquilar después.
+        Profesionales que guardaste para agendar después.
       </PageHeader>
       {loaderData.items.length ? (
-        <ListingGrid items={loaderData.items} cms={root?.cms} />
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {loaderData.items.map((p) => (
+            <li key={p.id}>
+              <PractitionerCard p={{ ...p }} cms={root?.cms} layout="tile" />
+            </li>
+          ))}
+        </ul>
       ) : (
         <EmptyState
-          title="Aún no guardas equipos"
+          title="Aún no guardas profesionales"
+          icon="heart"
           action={
-            <Link to="/explorar" className="btn-primary">
-              Explorar equipos
+            <Link to="/buscar" className="btn-primary">
+              Buscar profesionales
             </Link>
           }
         >
-          Toca el corazón en cualquier anuncio para guardarlo aquí.
+          Toca el corazón en cualquier perfil para guardarlo aquí.
         </EmptyState>
       )}
     </div>

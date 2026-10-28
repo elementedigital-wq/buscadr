@@ -4,7 +4,10 @@ Disallow: /api/
 Disallow: /maestro
 Disallow: /admin
 Disallow: /cuenta
-Disallow: /reservas
+Disallow: /citas
+Disallow: /pagar
+Disallow: /pagos
 Disallow: /panel
 Disallow: /favoritos
+Disallow: /notificaciones
 Sitemap: /sitemap.xml

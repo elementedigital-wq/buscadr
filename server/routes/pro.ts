@@ -55,7 +55,10 @@ pro.get("/me", async (c) => {
   if (!p) return c.json({ practitioner: null, rules: [], blocks: [] });
   const [rules, blocks] = await Promise.all([
     db.prepare("SELECT id,weekday,start_min,end_min,modality FROM availability_rules WHERE practitioner_id=? ORDER BY weekday,start_min").bind(p.id).all(),
-    db.prepare("SELECT id,start_ms,end_ms,reason FROM availability_blocks WHERE practitioner_id=? AND end_ms>? ORDER BY start_ms LIMIT 50").bind(p.id, Date.now()).all(),
+    db
+      .prepare("SELECT id,start_ms,end_ms,reason FROM availability_blocks WHERE practitioner_id=? AND end_ms>? ORDER BY start_ms LIMIT 50")
+      .bind(p.id, Date.now())
+      .all(),
   ]);
   return c.json({ practitioner: privateView(p), rules: rules.results, blocks: blocks.results });
 });
@@ -113,8 +116,23 @@ function normalizeProfile(b: ProfileInput, base: Partial<PractitionerRow>) {
     return n;
   };
   const bool = (v: unknown) => (v === undefined ? undefined : v ? 1 : 0);
-  const services = b.services === undefined ? undefined : JSON.stringify((Array.isArray(b.services) ? b.services : []).map((s) => clean(s, 60)).filter(Boolean).slice(0, 15));
-  const coords = (v: unknown, max: number) => (v === undefined ? undefined : v === null || v === "" ? null : Number.isFinite(Number(v)) && Math.abs(Number(v)) <= max ? Number(v) : fail(400, "Coordenadas inválidas"));
+  const services =
+    b.services === undefined
+      ? undefined
+      : JSON.stringify(
+          (Array.isArray(b.services) ? b.services : [])
+            .map((s) => clean(s, 60))
+            .filter(Boolean)
+            .slice(0, 15),
+        );
+  const coords = (v: unknown, max: number) =>
+    v === undefined
+      ? undefined
+      : v === null || v === ""
+        ? null
+        : Number.isFinite(Number(v)) && Math.abs(Number(v)) <= max
+          ? Number(v)
+          : fail(400, "Coordenadas inválidas");
   const cityRow = cityByName(city);
   const out = {
     kind,
@@ -160,7 +178,30 @@ pro.post("/me", async (c) => {
   const city = cityByName(b.city) ?? CITIES[0];
   const v = normalizeProfile(
     { in_person_enabled: true, virtual_enabled: false, slot_minutes: 30, ...b, city: city.name, display_name: b.display_name ?? user.name },
-    { languages: "Español", services: "[]", city: city.name, lat: city.lat, lng: city.lng, kind: "medico", title: "", buffer_minutes: 0, min_notice_hours: 2, auto_confirm: 0, prepay_virtual: 1, prepay_in_person: 0, years_experience: 0, price_in_person_cents: 0, price_virtual_cents: 0, subspecialty: "", headline: "", bio: "", insurances: "", license_number: "", sector: "", address: "" },
+    {
+      languages: "Español",
+      services: "[]",
+      city: city.name,
+      lat: city.lat,
+      lng: city.lng,
+      kind: "medico",
+      title: "",
+      buffer_minutes: 0,
+      min_notice_hours: 2,
+      auto_confirm: 0,
+      prepay_virtual: 1,
+      prepay_in_person: 0,
+      years_experience: 0,
+      price_in_person_cents: 0,
+      price_virtual_cents: 0,
+      subspecialty: "",
+      headline: "",
+      bio: "",
+      insurances: "",
+      license_number: "",
+      sector: "",
+      address: "",
+    },
   );
   let slug = slugify(`${v.title ?? ""} ${v.display_name}`);
   if (await db.prepare("SELECT 1 FROM practitioners WHERE slug=?").bind(slug).first()) slug = `${slug}-${crypto.randomUUID().slice(0, 6)}`;
@@ -177,7 +218,11 @@ pro.post("/me", async (c) => {
     [d, 540, 780],
     [d, 900, 1080],
   ]);
-  await db.batch(defaults.map(([d, s, e]) => db.prepare("INSERT INTO availability_rules(practitioner_id,weekday,start_min,end_min,modality) VALUES(?,?,?,?,'ambas')").bind(p!.id, d, s, e)));
+  await db.batch(
+    defaults.map(([d, s, e]) =>
+      db.prepare("INSERT INTO availability_rules(practitioner_id,weekday,start_min,end_min,modality) VALUES(?,?,?,?,'ambas')").bind(p!.id, d, s, e),
+    ),
+  );
   return c.json({ practitioner: privateView(p!), message: "Perfil creado. Completa tus datos y envíalo a verificación." }, 201);
 });
 
@@ -192,7 +237,13 @@ pro.patch("/me", async (c) => {
   const sensitive = v.display_name !== p.display_name || v.specialty !== p.specialty || v.license_number !== p.license_number || v.title !== p.title;
   const statements = [
     db
-      .prepare(`UPDATE practitioners SET ${Object.keys(v).map((k) => `${k}=?`).join(",")},updated_at=CURRENT_TIMESTAMP${sensitive && p.verification === "verificado" ? ",verification='pendiente',verified_at=NULL" : ""} WHERE id=?`)
+      .prepare(
+        `UPDATE practitioners SET ${Object.keys(v)
+          .map((k) => `${k}=?`)
+          .join(
+            ",",
+          )},updated_at=CURRENT_TIMESTAMP${sensitive && p.verification === "verificado" ? ",verification='pendiente',verified_at=NULL" : ""} WHERE id=?`,
+      )
       .bind(...Object.values(v), p.id),
   ];
   // Teléfono y consentimiento de WhatsApp para recibir solicitudes con botones de confirmación.
@@ -202,10 +253,15 @@ pro.patch("/me", async (c) => {
     const opt = b.whatsapp_opt_in === undefined ? user.whatsapp_opt_in : b.whatsapp_opt_in ? 1 : 0;
     if (opt && !phone) fail(400, "Agrega tu celular para recibir avisos por WhatsApp");
     statements.push(db.prepare("UPDATE users SET phone=?,whatsapp_opt_in=? WHERE id=?").bind(phone, opt, user.id));
-    if (opt !== user.whatsapp_opt_in) statements.push(db.prepare("INSERT INTO consent_records(user_id,kind,value) VALUES(?,?,?)").bind(user.id, "whatsapp_avisos", opt));
+    if (opt !== user.whatsapp_opt_in)
+      statements.push(db.prepare("INSERT INTO consent_records(user_id,kind,value) VALUES(?,?,?)").bind(user.id, "whatsapp_avisos", opt));
   }
   await db.batch(statements);
-  return c.json({ practitioner: privateView((await mine(db, user))!), message: sensitive && p.verification === "verificado" ? "Guardado. Como cambiaste datos de identidad, buscaDR volverá a verificarlos." : "Cambios guardados" });
+  return c.json({
+    practitioner: privateView((await mine(db, user))!),
+    message:
+      sensitive && p.verification === "verificado" ? "Guardado. Como cambiaste datos de identidad, buscaDR volverá a verificarlos." : "Cambios guardados",
+  });
 });
 
 /** Envía el perfil a verificación (revisión manual de buscaDR antes de publicarse). */
@@ -226,7 +282,11 @@ pro.post("/me/submit", async (c) => {
   const next = p.status === "paused" && p.verification === "verificado" ? "active" : "review";
   await db.prepare("UPDATE practitioners SET status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(next, p.id).run();
   await track(db, "practitioner_submitted", { userId: user.id, practitionerId: p.id });
-  return c.json({ ok: true, status: next, message: next === "active" ? "Tu perfil vuelve a estar publicado." : "Enviado a verificación. Te avisaremos cuando esté publicado." });
+  return c.json({
+    ok: true,
+    status: next,
+    message: next === "active" ? "Tu perfil vuelve a estar publicado." : "Enviado a verificación. Te avisaremos cuando esté publicado.",
+  });
 });
 
 pro.post("/me/pause", async (c) => {
@@ -243,7 +303,10 @@ pro.post("/me/photo", async (c) => {
   const p = await requirePractitioner(db, user);
   await hit(db, `upload:${user.id}`, RULES.upload);
   const stored = await storeUserImage(c.env, "p", user.id, c.req.raw);
-  await db.batch([db.prepare("UPDATE practitioners SET photo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(stored.url, p.id), db.prepare("UPDATE users SET avatar=? WHERE id=?").bind(stored.url, user.id)]);
+  await db.batch([
+    db.prepare("UPDATE practitioners SET photo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(stored.url, p.id),
+    db.prepare("UPDATE users SET avatar=? WHERE id=?").bind(stored.url, user.id),
+  ]);
   return c.json({ url: stored.url }, 201);
 });
 
@@ -258,7 +321,9 @@ pro.put("/schedule", async (c) => {
   await db.batch([
     db.prepare("DELETE FROM availability_rules WHERE practitioner_id=?").bind(p.id),
     ...rules.map((r) =>
-      db.prepare("INSERT INTO availability_rules(practitioner_id,weekday,start_min,end_min,modality) VALUES(?,?,?,?,?)").bind(p.id, r.weekday, r.start_min, r.end_min, r.modality),
+      db
+        .prepare("INSERT INTO availability_rules(practitioner_id,weekday,start_min,end_min,modality) VALUES(?,?,?,?,?)")
+        .bind(p.id, r.weekday, r.start_min, r.end_min, r.modality),
     ),
   ]);
   await track(db, "availability_published", { userId: user.id, practitionerId: p.id, props: { blocks: rules.length } });
@@ -289,7 +354,9 @@ pro.post("/blocks", async (c) => {
 pro.delete("/blocks/:id", async (c) => {
   const user = requireUser(c);
   const p = await requirePractitioner(c.env.DB, user);
-  await c.env.DB.prepare("DELETE FROM availability_blocks WHERE id=? AND practitioner_id=?").bind(Number(c.req.param("id")), p.id).run();
+  await c.env.DB.prepare("DELETE FROM availability_blocks WHERE id=? AND practitioner_id=?")
+    .bind(Number(c.req.param("id")), p.id)
+    .run();
   return c.json({ ok: true });
 });
 
@@ -364,7 +431,9 @@ pro.get("/dashboard", async (c) => {
       .bind(p.id, now)
       .first<{ n: number }>(),
     db
-      .prepare("SELECT COALESCE(SUM(net_cents),0) AS net, COALESCE(SUM(amount_cents),0) AS gross, COUNT(*) AS n FROM payments WHERE practitioner_id=? AND kind='cita' AND status='aprobado' AND created_at>=datetime(?/1000,'unixepoch')")
+      .prepare(
+        "SELECT COALESCE(SUM(net_cents),0) AS net, COALESCE(SUM(amount_cents),0) AS gross, COUNT(*) AS n FROM payments WHERE practitioner_id=? AND kind='cita' AND status='aprobado' AND created_at>=datetime(?/1000,'unixepoch')",
+      )
       .bind(p.id, monthStart)
       .first<{ net: number; gross: number; n: number }>(),
     reputationFor(db, [p.id]),
@@ -379,7 +448,11 @@ pro.get("/dashboard", async (c) => {
   const requests = Number(counts?.month_requests ?? 0);
   const steps = [
     { key: "perfil", label: "Perfil completo", done: p.bio.length >= 40 && !!p.license_number && !!p.photo },
-    { key: "tarifas", label: "Tarifas presencial y virtual", done: (!p.in_person_enabled || p.price_in_person_cents > 0) && (!p.virtual_enabled || p.price_virtual_cents > 0) },
+    {
+      key: "tarifas",
+      label: "Tarifas presencial y virtual",
+      done: (!p.in_person_enabled || p.price_in_person_cents > 0) && (!p.virtual_enabled || p.price_virtual_cents > 0),
+    },
     { key: "whatsapp", label: "Avisos por WhatsApp", done: !!(user.phone && user.whatsapp_opt_in) },
     { key: "verificacion", label: "Perfil verificado y publicado", done: p.status === "active" && p.verification === "verificado" },
   ];
@@ -402,7 +475,11 @@ pro.get("/dashboard", async (c) => {
       patients: rep?.patients ?? 0,
       views: p.views,
     },
-    upcoming: upcoming.results.map((a) => ({ ...a, patient_name: patientShortName(a.patient_name), status_label: STATUS_LABEL[a.status as AppointmentStatus] })),
+    upcoming: upcoming.results.map((a) => ({
+      ...a,
+      patient_name: patientShortName(a.patient_name),
+      status_label: STATUS_LABEL[a.status as AppointmentStatus],
+    })),
     reviews: recent.results.map((r) => ({ ...r, name: patientShortName(r.name) })),
     steps,
   });
@@ -427,7 +504,13 @@ pro.get("/income", async (c) => {
       )
       .bind(p.id, from, next)
       .all<Record<string, any>>()
-  ).results.map((r): Record<string, any> => ({ ...r, patient_name: patientShortName(r.patient_name), status_label: PAYMENT_STATUS_LABEL[r.status as PaymentRow["status"]] }));
+  ).results.map(
+    (r): Record<string, any> => ({
+      ...r,
+      patient_name: patientShortName(r.patient_name),
+      status_label: PAYMENT_STATUS_LABEL[r.status as PaymentRow["status"]],
+    }),
+  );
   const approved = rows.filter((r) => r.status === "aprobado");
   const totals = {
     gross_cents: approved.reduce((s, r) => s + r.amount_cents, 0),
@@ -443,10 +526,25 @@ pro.get("/income", async (c) => {
     const lines = [
       ["fecha", "transaccion", "cita", "paciente", "modalidad", "proveedor", "estado", "bruto_usd", "comision_usd", "neto_usd"].join(","),
       ...rows.map((r) =>
-        [r.created_at, r.id, r.appointment_id, r.patient_name, r.modality, r.provider, r.status_label, (r.amount_cents / 100).toFixed(2), (r.fee_cents / 100).toFixed(2), (r.net_cents / 100).toFixed(2)].map(esc).join(","),
+        [
+          r.created_at,
+          r.id,
+          r.appointment_id,
+          r.patient_name,
+          r.modality,
+          r.provider,
+          r.status_label,
+          (r.amount_cents / 100).toFixed(2),
+          (r.fee_cents / 100).toFixed(2),
+          (r.net_cents / 100).toFixed(2),
+        ]
+          .map(esc)
+          .join(","),
       ),
     ];
-    return new Response(`﻿${lines.join("\n")}\n`, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="ingresos-buscadr-${month}.csv"` } });
+    return new Response(`﻿${lines.join("\n")}\n`, {
+      headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="ingresos-buscadr-${month}.csv"` },
+    });
   }
   return c.json({ month, items: rows, totals, fee_bps: feeBps(c.env) });
 });
@@ -458,7 +556,9 @@ pro.get("/plan", async (c) => {
   const db = c.env.DB;
   const p = await requirePractitioner(db, user);
   const subs = await db
-    .prepare("SELECT s.plan,s.status,s.amount_cents,s.period_start_ms,s.period_end_ms,s.created_at FROM subscriptions s WHERE s.practitioner_id=? ORDER BY s.id DESC LIMIT 24")
+    .prepare(
+      "SELECT s.plan,s.status,s.amount_cents,s.period_start_ms,s.period_end_ms,s.created_at FROM subscriptions s WHERE s.practitioner_id=? ORDER BY s.id DESC LIMIT 24",
+    )
     .bind(p.id)
     .all();
   return c.json({ plan: p.plan, plan_until_ms: p.plan_until_ms, history: subs.results, enforced: c.env.BUSCADR_ENFORCE_PLANS === "1" });
@@ -471,9 +571,16 @@ pro.post("/plan", async (c) => {
   await hit(db, `write:${user.id}`, RULES.write);
   const plan = PLAN_MAP.get(String((await readJson<{ plan?: string }>(c)).plan));
   if (!plan || plan.price_cents <= 0) fail(400, "Elige un plan de pago");
-  const created = await createPayment(db, c.env, { kind: "plan", plan: plan.id, payer_id: user.id, practitioner_id: p.id, amount_cents: plan.price_cents, fee_cents: plan.price_cents, net_cents: 0 });
+  const created = await createPayment(db, c.env, {
+    kind: "plan",
+    plan: plan.id,
+    payer_id: user.id,
+    practitioner_id: p.id,
+    amount_cents: plan.price_cents,
+    fee_cents: plan.price_cents,
+    net_cents: 0,
+  });
   const row = await db.prepare("SELECT * FROM payments WHERE id=?").bind(created.id).first<PaymentRow>();
   const checkout = await startCheckout(c.env, row!, new URL(c.req.url).origin, `Plan ${plan.name} buscaDR · ${fullName(p)}`);
   return c.json({ checkout: checkout?.url ?? `/pagar/${created.id}` });
 });
-

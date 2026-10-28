@@ -1,20 +1,21 @@
 {
-  "name": "buscaDR · Herramientas a tu alcance",
+  "name": "buscaDR · Confianza para encontrar salud",
   "short_name": "buscaDR",
-  "description": "Alquila herramientas y equipos cerca de ti en Guayaquil, Samborondón y Daule, o publica los tuyos.",
+  "description": "Encuentra médicos y especialistas en Ecuador, compara tarifas presenciales y virtuales y agenda tu cita.",
   "lang": "es-EC",
   "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#5F4489",
+  "background_color": "#F6F9FC",
+  "theme_color": "#0F62FE",
+  "categories": ["medical", "health"],
   "icons": [
     { "src": "/assets/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/assets/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ],
   "shortcuts": [
-    { "name": "Explorar equipos", "url": "/explorar" },
-    { "name": "Mis reservas", "url": "/reservas" },
-    { "name": "Publicar un equipo", "url": "/publicar" }
+    { "name": "Buscar profesional", "url": "/buscar" },
+    { "name": "Mis citas", "url": "/citas" },
+    { "name": "Mi consultorio", "url": "/panel" }
   ]
 }

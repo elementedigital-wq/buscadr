@@ -93,14 +93,35 @@ export type AppointmentView = {
   actions: string[];
   free_cancel_until: number;
   video: { open: boolean; url: string | null; opens_at: number } | null;
-  practitioner: { id: number; slug: string; name: string; specialty: string; photo: string; city: string; sector: string; address: string | null; lat: number | null; lng: number | null };
+  practitioner: {
+    id: number;
+    slug: string;
+    name: string;
+    specialty: string;
+    photo: string;
+    city: string;
+    sector: string;
+    address: string | null;
+    lat: number | null;
+    lng: number | null;
+  };
   patient: { name: string };
   whatsapp: { support: string | null; share: string };
   ics: string;
   events: { type: string; actor: string; created_at: string }[];
   messages: { id: number; mine: boolean; author: string; body: string; masked: boolean; created_at: string }[];
   review: { rating: number; body: string; reply: string; created_at: string } | null;
-  payments: { id: string; status: string; amount_cents: number; provider: string; card_brand: string; card_last4: string; created_at: string; approved_at: string | null; refunded_at: string | null }[];
+  payments: {
+    id: string;
+    status: string;
+    amount_cents: number;
+    provider: string;
+    card_brand: string;
+    card_last4: string;
+    created_at: string;
+    approved_at: string | null;
+    refunded_at: string | null;
+  }[];
 };
 
 export type Notification = { id: number; kind: string; title: string; body: string; link: string; read_at: string | null; created_at: string };

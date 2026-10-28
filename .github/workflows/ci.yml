@@ -1,7 +1,7 @@
 name: buscaDR CI
 on:
   push:
-    branches: [main]
+    branches: [main, "claude/**"]
   pull_request:
 jobs:
   verify:

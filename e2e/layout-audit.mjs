@@ -18,8 +18,27 @@ const { chromium } = require("playwright");
 const base = process.env.BASE_URL ?? "http://127.0.0.1:5173";
 const WIDTHS = (process.env.WIDTHS ?? "320,375,390,414,768,1024,1280,1440").split(",").map(Number);
 
-const PUBLIC = ["/", "/categorias", "/explorar", "/explorar?vista=fotos", "/explorar?q=retroexcavadora", "/equipo/2", "/equipo/2/reservar", "/equipo/2/reservar?paso=2&dur=1d", "/equipo/2/reservar?paso=3&dur=1d", "/como-funciona", "/cuenta", "/cuenta?tab=registro", "/alquiler/guayaquil/construccion", "/maestro", "/no-existe"];
-const PRIVATE = ["/", "/reservas", "/panel", "/favoritos", "/cuenta", "/publicar"];
+const PUBLIC = [
+  "/",
+  "/buscar",
+  "/buscar?modalidad=virtual&orden=precio",
+  "/buscar?vista=mapa",
+  "/buscar?q=xyz-sin-resultados",
+  "/especialidades",
+  "/doctor/dr-andres-salazar",
+  "/doctor/clinica-del-parque",
+  "/medicos/guayaquil/pediatria",
+  "/planes",
+  "/para-profesionales",
+  "/como-funciona",
+  "/privacidad",
+  "/cuenta",
+  "/cuenta?tab=registro&rol=profesional",
+  "/maestro",
+  "/no-existe",
+];
+const PATIENT = ["/", "/citas", "/favoritos", "/notificaciones", "/cuenta", "/doctor/dr-andres-salazar"];
+const PRO = ["/panel", "/panel/agenda", "/panel/horarios", "/panel/perfil", "/panel/ingresos", "/panel/plan"];
 
 /** Corre en la página: devuelve problemas de maquetación visibles. */
 function audit() {
@@ -94,6 +113,15 @@ function audit() {
 
 const browser = await chromium.launch();
 const report = [];
+/** Ejecuta la auditoría; si la página navega a mitad (redirección o recarga), espera y reintenta una vez. */
+async function auditPage(page) {
+  try {
+    return await page.evaluate(audit);
+  } catch {
+    await page.waitForLoadState("networkidle").catch(() => {});
+    return page.evaluate(audit);
+  }
+}
 async function run(name, setup, paths) {
   for (const w of WIDTHS) {
     const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
@@ -103,13 +131,13 @@ async function run(name, setup, paths) {
     for (const path of paths) {
       await page.goto(base + path, { waitUntil: "networkidle" }).catch(() => {});
       await page.waitForTimeout(250);
-      for (const issue of await page.evaluate(audit)) report.push(`[${name} ${w}px] ${path}: ${issue}`);
+      for (const issue of await auditPage(page)) report.push(`[${name} ${w}px] ${path}: ${issue}`);
       // CMS: además de la portada del editor, cada pestaña.
       if (path === "/maestro") {
         for (const tab of await page.$$eval("[data-tab]", (els) => els.map((e) => e.getAttribute("data-tab")))) {
           await page.click(`[data-tab="${tab}"]`).catch(() => {});
           await page.waitForTimeout(300);
-          for (const issue of await page.evaluate(audit)) report.push(`[${name} ${w}px] /maestro#${tab}: ${issue}`);
+          for (const issue of await auditPage(page)) report.push(`[${name} ${w}px] /maestro#${tab}: ${issue}`);
         }
       }
     }
@@ -127,37 +155,51 @@ const login = (email, password) => async (page) => {
   if (status !== 200) throw new Error(`No se pudo iniciar sesión con ${email} (${status})`);
 };
 
-try {
-  await run("visitante", null, PUBLIC);
-  // Cuenta nueva de prueba.
-  const email = `layout-${Date.now()}@test.ec`;
+/** Llamadas a la API desde el navegador (cookie de sesión + cabecera CSRF). */
+async function setupAccounts() {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto(base);
-  // Cuenta nueva + una reserva de prueba sobre un anuncio de muestra (para auditar el detalle y el chat).
-  const bookingId = await page.evaluate(async (e) => {
+  const stamp = Date.now();
+  const out = await page.evaluate(async (stamp) => {
     const h = { "Content-Type": "application/json", "X-Requested-With": "BUSCADR-WEB" };
-    await fetch("/api/auth/register", {
-      method: "POST",
-      headers: h,
-      body: JSON.stringify({ name: "Prueba Maquetación", email: e, password: "contrasena-prueba-123", role: "owner", acceptTerms: true }),
-    });
-    const day = new Date(Date.now() - 5 * 3_600_000 + 2 * 86_400_000).toISOString().slice(0, 10);
-    const res = await fetch("/api/bookings", {
-      method: "POST",
-      headers: h,
-      body: JSON.stringify({ listing_id: 1, start: `${day}T09:00`, end: `${day}T18:00`, idempotency_key: crypto.randomUUID().replace(/-/g, "") }),
-    }).then((r) => r.json());
-    if (res.id)
-      await fetch(`/api/bookings/${res.id}/messages`, {
-        method: "POST",
-        headers: h,
-        body: JSON.stringify({ body: "Hola, ¿puedo retirarlo a las 9:00? Es para lavar el patio y la fachada de la casa." }),
-      });
-    return res.id;
-  }, email);
+    const call = (method, path, body) => fetch(path, { method, headers: h, body: body ? JSON.stringify(body) : undefined }).then((r) => r.json());
+    const weekday = (minDays, hour) => {
+      for (let i = minDays; i < minDays + 10; i++) {
+        const d = new Date(Date.now() - 5 * 3_600_000 + i * 86_400_000);
+        if (d.getUTCDay() >= 1 && d.getUTCDay() <= 5) return `${d.toISOString().slice(0, 10)}T${String(hour).padStart(2, "0")}:00`;
+      }
+    };
+    const key = () => crypto.randomUUID().replace(/-/g, "");
+    // Profesional con perfil en borrador (panel completo).
+    const pro = `layout-pro-${stamp}@test.ec`;
+    await call("POST", "/api/auth/register", { name: "Dra. Prueba Maquetación", email: pro, password: "contrasena-prueba-123", role: "pro", acceptTerms: true, phone: "0991234567", whatsapp_opt_in: true });
+    await call("POST", "/api/pro/me", { title: "Dra.", display_name: "Prueba Maquetación Con Un Nombre Bastante Largo", specialty: "pediatria", city: "Guayaquil", sector: "Urdesa" });
+    await call("PATCH", "/api/pro/me", { bio: "Pediatra con experiencia.", price_in_person_cents: 4000, price_virtual_cents: 3000, virtual_enabled: true, address: "Av. Principal 123" });
+    await call("POST", "/api/auth/logout");
+    // Paciente con una cita presencial (perfil de muestra: se confirma sola) y una virtual con pago pendiente.
+    const patient = `layout-pac-${stamp}@test.ec`;
+    await call("POST", "/api/auth/register", { name: "Paciente Maquetación", email: patient, password: "contrasena-prueba-123", role: "patient", acceptTerms: true });
+    const a = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(2, 10), modality: "presencial", idempotency_key: key(), reason: "Control general y revisión de exámenes de laboratorio recientes." });
+    if (a.id) await call("POST", `/api/appointments/${a.id}/messages`, { body: "Hola doctor, ¿debo llevar los exámenes impresos o basta con el PDF en el celular?" });
+    const v = await call("POST", "/api/appointments", { practitioner_id: 4, start: weekday(3, 16), modality: "virtual", idempotency_key: key() });
+    await call("PUT", "/api/me/favorites/4");
+    return { pro, patient, appointment: a.id, virtual: v.id, checkout: v.checkout };
+  }, stamp);
   await ctx.close();
-  await run("con sesión", login(email, "contrasena-prueba-123"), [...PRIVATE, ...(bookingId ? [`/reservas/${bookingId}`] : [])]);
+  return out;
+}
+
+try {
+  await run("visitante", null, PUBLIC);
+  const acc = await setupAccounts();
+  await run("paciente", login(acc.patient, "contrasena-prueba-123"), [
+    ...PATIENT,
+    ...(acc.appointment ? [`/citas/${acc.appointment}`] : []),
+    ...(acc.virtual ? [`/citas/${acc.virtual}`] : []),
+    ...(acc.checkout?.startsWith("/") ? [acc.checkout] : []),
+  ]);
+  await run("profesional", login(acc.pro, "contrasena-prueba-123"), PRO);
   if (process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) await run("propietario", login(process.env.ADMIN_EMAIL, process.env.ADMIN_PASSWORD), ["/maestro", "/admin"]);
 } finally {
   await browser.close();

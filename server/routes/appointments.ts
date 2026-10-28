@@ -208,7 +208,8 @@ appointments.post("/", async (c) => {
   const modality: Modality = b.modality === "virtual" ? "virtual" : "presencial";
   if (modality === "virtual" && !p.virtual_enabled) fail(400, "Este profesional no ofrece citas virtuales");
   if (modality === "presencial" && !p.in_person_enabled) fail(400, "Este profesional solo atiende citas virtuales");
-  if (c.env.BUSCADR_ENFORCE_PLANS === "1" && modality === "virtual" && !planAllows(p.plan, "virtual")) fail(403, "Las citas virtuales requieren el plan Pro del profesional", "PLAN_LIMIT");
+  if (c.env.BUSCADR_ENFORCE_PLANS === "1" && modality === "virtual" && !planAllows(p.plan, "virtual"))
+    fail(403, "Las citas virtuales requieren el plan Pro del profesional", "PLAN_LIMIT");
   const start = parseLocal(b.start);
   if (!start) fail(400, "Elige fecha y hora de la cita");
   const now = Date.now();
@@ -244,7 +245,12 @@ appointments.post("/", async (c) => {
   }
   const id = inserted.id;
   await event(db, id, status === "confirmada" ? "creada_confirmada" : "solicitada", user.id, { modality, online }).run();
-  await track(db, status === "confirmada" ? "booking_confirmed" : "booking_requested", { userId: user.id, appointmentId: id, practitionerId: p.id, props: { modality, online } });
+  await track(db, status === "confirmada" ? "booking_confirmed" : "booking_requested", {
+    userId: user.id,
+    appointmentId: id,
+    practitionerId: p.id,
+    props: { modality, online },
+  });
 
   let checkout: string | null = null;
   if (online) {
@@ -260,7 +266,18 @@ appointments.post("/", async (c) => {
     const row = await db.prepare("SELECT * FROM payments WHERE id=?").bind(pay.id).first<PaymentRow>();
     checkout = (await startCheckout(c.env, row!, origin(c), `Cita ${modality} #${id} · ${fullName(p)}`))?.url ?? `/pagar/${pay.id}`;
   } else {
-    const lite = { id, status, start_ms: start, practitioner_id: p.id, patient_id: user.id, pro_user_id: p.user_id, modality, auto_confirm: p.auto_confirm, demo: p.demo, name: fullName(p) };
+    const lite = {
+      id,
+      status,
+      start_ms: start,
+      practitioner_id: p.id,
+      patient_id: user.id,
+      pro_user_id: p.user_id,
+      modality,
+      auto_confirm: p.auto_confirm,
+      demo: p.demo,
+      name: fullName(p),
+    };
     c.executionCtx.waitUntil(
       Promise.all([
         notifyNewRequest(c.env, origin(c), lite, status === "confirmada"),
@@ -304,7 +321,14 @@ export function listView(r: Record<string, any>, as: "patient" | "pro") {
     created_at: r.created_at,
     messages: r.messages ?? 0,
     demo: !!r.demo,
-    practitioner: { slug: r.slug, name: `${r.title ? `${r.title} ` : ""}${r.display_name}`, specialty: r.specialty, photo: r.photo, city: r.city, sector: r.sector },
+    practitioner: {
+      slug: r.slug,
+      name: `${r.title ? `${r.title} ` : ""}${r.display_name}`,
+      specialty: r.specialty,
+      photo: r.photo,
+      city: r.city,
+      sector: r.sector,
+    },
     patient: as === "pro" ? { name: patientShortName(r.patient_name) } : undefined,
   };
 }
@@ -339,7 +363,9 @@ appointments.get("/:id", async (c) => {
     db.prepare("SELECT id,sender_id,body,masked,created_at FROM messages WHERE appointment_id=? ORDER BY id LIMIT 300").bind(a.id).all<Record<string, any>>(),
     db.prepare("SELECT rating,body,reply,created_at FROM reviews WHERE appointment_id=?").bind(a.id).first<Record<string, any>>(),
     db
-      .prepare("SELECT id,status,amount_cents,provider,card_brand,card_last4,created_at,approved_at,refunded_at FROM payments WHERE appointment_id=? ORDER BY created_at DESC")
+      .prepare(
+        "SELECT id,status,amount_cents,provider,card_brand,card_last4,created_at,approved_at,refunded_at FROM payments WHERE appointment_id=? ORDER BY created_at DESC",
+      )
       .bind(a.id)
       .all<Record<string, any>>(),
     db.prepare("SELECT name FROM users WHERE id=?").bind(a.patient_id).first<{ name: string }>(),
@@ -348,7 +374,8 @@ appointments.get("/:id", async (c) => {
   const confirmed = ["confirmada", "completada"].includes(a.status);
   const now = Date.now();
   const proName = fullName(p);
-  const name = (id: string | null) => (!id ? "buscaDR" : id === a.patient_id ? (role === "patient" ? "Tú" : patientShortName(patient?.name)) : id === a.pro_user_id ? proName : "Equipo buscaDR");
+  const name = (id: string | null) =>
+    !id ? "buscaDR" : id === a.patient_id ? (role === "patient" ? "Tú" : patientShortName(patient?.name)) : id === a.pro_user_id ? proName : "Equipo buscaDR";
   return c.json({
     appointment: {
       id: a.id,
@@ -376,7 +403,10 @@ appointments.get("/:id", async (c) => {
       checkin_code: confirmed && a.modality === "presencial" ? a.checkin_code : null,
       actions: availableActions(a, role, { demo, reviewed: !!review }),
       free_cancel_until: a.start_ms - FREE_CANCEL_MS,
-      video: a.modality === "virtual" ? { open: videoOpen(a, now), url: videoOpen(a, now) || demo ? videoUrl(a.video_room) : null, opens_at: a.start_ms - 15 * MINUTE } : null,
+      video:
+        a.modality === "virtual"
+          ? { open: videoOpen(a, now), url: videoOpen(a, now) || demo ? videoUrl(a.video_room) : null, opens_at: a.start_ms - 15 * MINUTE }
+          : null,
       practitioner: {
         id: p.id,
         slug: p.slug,
@@ -398,7 +428,14 @@ appointments.get("/:id", async (c) => {
       },
       ics: `/api/appointments/${a.id}/ics`,
       events: events.results.map((e) => ({ type: e.type, actor: name(e.actor_id), created_at: e.created_at })),
-      messages: messages.results.map((m) => ({ id: m.id, mine: m.sender_id === user.id, author: name(m.sender_id), body: m.body, masked: !!m.masked, created_at: m.created_at })),
+      messages: messages.results.map((m) => ({
+        id: m.id,
+        mine: m.sender_id === user.id,
+        author: name(m.sender_id),
+        body: m.body,
+        masked: !!m.masked,
+        created_at: m.created_at,
+      })),
       review: review ?? null,
       payments: payments.results,
     },
@@ -417,7 +454,13 @@ appointments.get("/:id/ics", async (c) => {
     location: a.modality === "virtual" ? "Videollamada (enlace en buscaDR)" : `${p.sector}, ${p.city}`,
     url: `${origin(c)}/citas/${a.id}`,
   });
-  return new Response(body, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="cita-buscadr-${a.id}.ics"`, "Cache-Control": "no-store" } });
+  return new Response(body, {
+    headers: {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": `attachment; filename="cita-buscadr-${a.id}.ics"`,
+      "Cache-Control": "no-store",
+    },
+  });
 });
 
 /* ------------------------------------------------------------------ Acciones */
@@ -432,7 +475,10 @@ async function transition(db: D1Database, a: AppointmentRow, to: AppointmentStat
 }
 
 const approvedPayment = (db: D1Database, appointmentId: number) =>
-  db.prepare("SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND provider<>'consultorio' ORDER BY approved_at DESC LIMIT 1").bind(appointmentId).first<PaymentRow>();
+  db
+    .prepare("SELECT * FROM payments WHERE appointment_id=? AND status='aprobado' AND provider<>'consultorio' ORDER BY approved_at DESC LIMIT 1")
+    .bind(appointmentId)
+    .first<PaymentRow>();
 
 appointments.post("/:id/actions/:action", async (c) => {
   const user = requireUser(c);
@@ -454,7 +500,14 @@ appointments.post("/:id/actions/:action", async (c) => {
     case "confirm":
       await transition(db, a, TRANSITIONS.confirm.to, { confirmed_at: nowText(), hold_expires_ms: null });
       c.executionCtx.waitUntil(
-        notifyPatient(c.env, o, lite, "cita_confirmada", "Tu cita está confirmada", `${fullName(p)} · ${formatLong(a.start_ms)}. Te recordaremos 24 h y 1 h antes.`),
+        notifyPatient(
+          c.env,
+          o,
+          lite,
+          "cita_confirmada",
+          "Tu cita está confirmada",
+          `${fullName(p)} · ${formatLong(a.start_ms)}. Te recordaremos 24 h y 1 h antes.`,
+        ),
       );
       break;
     case "decline": {
@@ -462,12 +515,22 @@ appointments.post("/:id/actions/:action", async (c) => {
       const paid = await approvedPayment(db, a.id);
       if (paid) await refundPayment(c.env, paid, "Cita no aceptada por el profesional");
       c.executionCtx.waitUntil(
-        notifyPatient(c.env, o, lite, "cita_rechazada", "El profesional no pudo aceptar tu cita", `${fullName(p)} · ${formatLong(a.start_ms)}.${paid ? " Te reembolsamos el pago." : ""} Elige otro horario en buscaDR.`),
+        notifyPatient(
+          c.env,
+          o,
+          lite,
+          "cita_rechazada",
+          "El profesional no pudo aceptar tu cita",
+          `${fullName(p)} · ${formatLong(a.start_ms)}.${paid ? " Te reembolsamos el pago." : ""} Elige otro horario en buscaDR.`,
+        ),
       );
       break;
     }
     case "cancel": {
-      await transition(db, a, TRANSITIONS.cancel.to, { cancel_reason: `${role === "patient" ? "Paciente" : "Profesional"}: ${clean(input.reason, 260) || "sin motivo"}`, hold_expires_ms: null });
+      await transition(db, a, TRANSITIONS.cancel.to, {
+        cancel_reason: `${role === "patient" ? "Paciente" : "Profesional"}: ${clean(input.reason, 260) || "sin motivo"}`,
+        hold_expires_ms: null,
+      });
       const paid = await approvedPayment(db, a.id);
       // Reembolso: siempre si cancela el profesional; si cancela el paciente, hasta 4 h antes.
       const refundable = paid && (role !== "patient" || Date.now() <= a.start_ms - FREE_CANCEL_MS);
@@ -478,15 +541,42 @@ appointments.post("/:id/actions/:action", async (c) => {
           (async () => {
             const { recipient, notify } = await import("../lib/notify");
             const pro = await recipient(db, a.pro_user_id);
-            if (pro) await notify(c.env, pro, { kind: "cita_cancelada", title: "Un paciente canceló su cita", body: `Cita #${a.id} del ${formatLong(a.start_ms)}. El horario quedó libre.`, link: `/panel/citas/${a.id}`, origin: o, ref: `cita:${a.id}` });
+            if (pro)
+              await notify(c.env, pro, {
+                kind: "cita_cancelada",
+                title: "Un paciente canceló su cita",
+                body: `Cita #${a.id} del ${formatLong(a.start_ms)}. El horario quedó libre.`,
+                link: `/panel/citas/${a.id}`,
+                origin: o,
+                ref: `cita:${a.id}`,
+              });
           })(),
         );
-      } else c.executionCtx.waitUntil(notifyPatient(c.env, o, lite, "cita_cancelada", "Tu cita fue cancelada", `${fullName(p)} canceló la cita del ${formatLong(a.start_ms)}.${refundable ? " Te reembolsamos el pago." : ""}`));
+      } else
+        c.executionCtx.waitUntil(
+          notifyPatient(
+            c.env,
+            o,
+            lite,
+            "cita_cancelada",
+            "Tu cita fue cancelada",
+            `${fullName(p)} canceló la cita del ${formatLong(a.start_ms)}.${refundable ? " Te reembolsamos el pago." : ""}`,
+          ),
+        );
       break;
     }
     case "complete":
       await transition(db, a, TRANSITIONS.complete.to, { completed_at: nowText() });
-      c.executionCtx.waitUntil(notifyPatient(c.env, o, lite, "cita_completada", "¿Cómo fue tu cita?", `Cuéntanos tu experiencia con ${fullName(p)}. Tu opinión verificada ayuda a otros pacientes.`));
+      c.executionCtx.waitUntil(
+        notifyPatient(
+          c.env,
+          o,
+          lite,
+          "cita_completada",
+          "¿Cómo fue tu cita?",
+          `Cuéntanos tu experiencia con ${fullName(p)}. Tu opinión verificada ayuda a otros pacientes.`,
+        ),
+      );
       break;
     case "no_show":
       await transition(db, a, TRANSITIONS.no_show.to);
@@ -500,22 +590,45 @@ appointments.post("/:id/actions/:action", async (c) => {
           .prepare(
             "INSERT INTO payments(id,kind,appointment_id,payer_id,practitioner_id,amount_cents,fee_cents,net_cents,provider,status,method,approved_at) VALUES(?,?,?,?,?,?,0,?,'consultorio','aprobado',?,?)",
           )
-          .bind(id, "cita", a.id, a.patient_id, p.id, a.price_cents, a.price_cents, ["efectivo", "tarjeta", "transferencia"].includes(String(input.body)) ? String(input.body) : "efectivo", nowText()),
+          .bind(
+            id,
+            "cita",
+            a.id,
+            a.patient_id,
+            p.id,
+            a.price_cents,
+            a.price_cents,
+            ["efectivo", "tarjeta", "transferencia"].includes(String(input.body)) ? String(input.body) : "efectivo",
+            nowText(),
+          ),
         db.prepare("INSERT INTO payment_events(payment_id,type,detail) VALUES(?,?,?)").bind(id, "registrado_en_consultorio", JSON.stringify({ by: user.id })),
         db.prepare("UPDATE appointments SET payment_status='pagado',updated_at=CURRENT_TIMESTAMP WHERE id=? AND payment_status='no_requerido'").bind(a.id),
       ]);
       break;
     }
     case "pay": {
-      let pay = await db.prepare("SELECT * FROM payments WHERE appointment_id=? AND status IN ('creado','pendiente','rechazado') ORDER BY created_at DESC LIMIT 1").bind(a.id).first<PaymentRow>();
+      let pay = await db
+        .prepare("SELECT * FROM payments WHERE appointment_id=? AND status IN ('creado','pendiente','rechazado') ORDER BY created_at DESC LIMIT 1")
+        .bind(a.id)
+        .first<PaymentRow>();
       if (!pay) {
-        const created = await createPayment(db, c.env, { kind: "cita", appointment_id: a.id, payer_id: a.patient_id, practitioner_id: p.id, amount_cents: a.price_cents, fee_cents: a.fee_cents, net_cents: a.net_cents });
+        const created = await createPayment(db, c.env, {
+          kind: "cita",
+          appointment_id: a.id,
+          payer_id: a.patient_id,
+          practitioner_id: p.id,
+          amount_cents: a.price_cents,
+          fee_cents: a.fee_cents,
+          net_cents: a.net_cents,
+        });
         pay = await db.prepare("SELECT * FROM payments WHERE id=?").bind(created.id).first<PaymentRow>();
       }
       // Si el plazo para pagar venció, se renueva mientras el horario siga libre.
       if (a.status === "solicitada" && (a.hold_expires_ms ?? 0) < Date.now()) {
         const res = await db
-          .prepare(`UPDATE appointments SET hold_expires_ms=?,payment_status='pendiente' WHERE id=? AND status='solicitada' AND NOT EXISTS(${OVERLAP_SQL} AND a.id<>?)`)
+          .prepare(
+            `UPDATE appointments SET hold_expires_ms=?,payment_status='pendiente' WHERE id=? AND status='solicitada' AND NOT EXISTS(${OVERLAP_SQL} AND a.id<>?)`,
+          )
           .bind(Math.min(Date.now() + PAYMENT_HOLD_MS, a.start_ms), a.id, p.id, Date.now(), a.block_until_ms, a.start_ms, a.id)
           .run();
         if (!res.meta.changes) fail(409, "El horario se ocupó mientras tanto. Reprograma tu cita.", "BOOKING_SLOT_TAKEN");
@@ -546,7 +659,9 @@ appointments.post("/:id/actions/:action", async (c) => {
       });
       if (!inserted) fail(409, "Ese horario acaba de ocuparse. Elige otro.", "BOOKING_SLOT_TAKEN");
       const old = await db
-        .prepare("UPDATE appointments SET status='cancelada',cancel_reason=?,hold_expires_ms=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('solicitada','confirmada')")
+        .prepare(
+          "UPDATE appointments SET status='cancelada',cancel_reason=?,hold_expires_ms=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status IN ('solicitada','confirmada')",
+        )
         .bind(`Reprogramada a la cita #${inserted.id}`, a.id)
         .run();
       if (!old.meta.changes) {
@@ -560,7 +675,18 @@ appointments.post("/:id/actions/:action", async (c) => {
       ]);
       await track(db, "booking_rescheduled", { userId: user.id, appointmentId: inserted.id, practitionerId: p.id });
       if (!demo) {
-        const fresh = { id: inserted.id, status: instant ? "confirmada" : "solicitada", start_ms: start, practitioner_id: p.id, patient_id: a.patient_id, pro_user_id: p.user_id, modality: a.modality, auto_confirm: p.auto_confirm, demo: p.demo, name: fullName(p) };
+        const fresh = {
+          id: inserted.id,
+          status: instant ? "confirmada" : "solicitada",
+          start_ms: start,
+          practitioner_id: p.id,
+          patient_id: a.patient_id,
+          pro_user_id: p.user_id,
+          modality: a.modality,
+          auto_confirm: p.auto_confirm,
+          demo: p.demo,
+          name: fullName(p),
+        };
         c.executionCtx.waitUntil(notifyNewRequest(c.env, o, fresh, instant));
       }
       response = { id: inserted.id };
@@ -578,8 +704,20 @@ appointments.post("/:id/actions/:action", async (c) => {
     }
   }
   await event(db, a.id, action, user.id, action === "cancel" || action === "decline" ? { reason: clean(input.reason, 200) } : {}).run();
-  const names = { confirm: "booking_confirmed", decline: "booking_declined", cancel: "booking_cancelled", complete: "booking_completed", no_show: "booking_no_show" } as const;
-  if (action in names) await track(db, names[action as keyof typeof names], { userId: user.id, appointmentId: a.id, practitionerId: p.id, props: { by: proSide ? "pro" : "patient" } });
+  const names = {
+    confirm: "booking_confirmed",
+    decline: "booking_declined",
+    cancel: "booking_cancelled",
+    complete: "booking_completed",
+    no_show: "booking_no_show",
+  } as const;
+  if (action in names)
+    await track(db, names[action as keyof typeof names], {
+      userId: user.id,
+      appointmentId: a.id,
+      practitionerId: p.id,
+      props: { by: proSide ? "pro" : "patient" },
+    });
   return c.json({ ok: true, action, ...response });
 });
 
@@ -616,4 +754,3 @@ appointments.post("/:id/messages", async (c) => {
   }
   return c.json({ message: { id: row!.id, mine: true, author: "Tú", body: text, masked, created_at: row!.created_at } }, 201);
 });
-

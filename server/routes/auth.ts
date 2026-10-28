@@ -23,7 +23,6 @@ import {
 import { createSession, destroySession, readSessionToken, sessionCookie } from "../lib/session";
 import { toE164Ecuador } from "../lib/whatsapp";
 
-
 const RegisterSchema = z.object({
   name: z.string().trim().min(2, "Escribe tu nombre (mínimo 2 caracteres)").max(80),
   email: z.string().trim().toLowerCase().email("Correo inválido").max(180),
@@ -96,7 +95,10 @@ auth.post("/register", async (c) => {
   return c.json(
     {
       user: publicUser(user, c.env),
-      message: b.role === "pro" ? "Cuenta creada. Completa tu perfil profesional para activar tu agenda." : "Cuenta creada. Ya puedes reservar citas con profesionales de la salud.",
+      message:
+        b.role === "pro"
+          ? "Cuenta creada. Completa tu perfil profesional para activar tu agenda."
+          : "Cuenta creada. Ya puedes reservar citas con profesionales de la salud.",
     },
     201,
   );
@@ -190,7 +192,8 @@ auth.post("/owner/reset", async (c) => {
   const next = String(b.password ?? "");
   const problem = passwordProblem(c.env, next);
   if (problem) fail(400, problem);
-  if (!(await consumeOwnerReset(db, c.env, String(b.token ?? "")))) fail(400, "El enlace no es válido o ya venció. Pide uno nuevo desde /maestro.", "RESET_INVALID");
+  if (!(await consumeOwnerReset(db, c.env, String(b.token ?? ""))))
+    fail(400, "El enlace no es válido o ya venció. Pide uno nuevo desde /maestro.", "RESET_INVALID");
   const user = await setOwnerPassword(db, c.env, next);
   c.header("Set-Cookie", await createSession(db, user.id));
   c.executionCtx.waitUntil(notifyOwnerPasswordChanged(c.env));
@@ -219,7 +222,10 @@ auth.post("/google", async (c) => {
     return c.json({ user: publicUser(linked, c.env), message: "Sesión iniciada con Google." });
   }
   if (await db.prepare("SELECT id FROM users WHERE email=?").bind(claims.email).first()) {
-    return c.json({ code: "GOOGLE_LINK_REQUIRED", error: "Este correo ya tiene cuenta buscaDR. Entra con tu contraseña y vincula Google desde Mi cuenta." }, 409);
+    return c.json(
+      { code: "GOOGLE_LINK_REQUIRED", error: "Este correo ya tiene cuenta buscaDR. Entra con tu contraseña y vincula Google desde Mi cuenta." },
+      409,
+    );
   }
   if (b.intent !== "register")
     return c.json({ code: "GOOGLE_SIGNUP_REQUIRED", error: "No existe una cuenta buscaDR con este Google. Crea tu cuenta primero." }, 404);
@@ -263,7 +269,16 @@ auth.post("/role", async (c) => {
 /** Preferencias: nombre, ciudad, sector, teléfono, perfil y consentimiento de WhatsApp (con evidencia). */
 auth.patch("/preferences", async (c) => {
   const user = requireUser(c);
-  const b = await readJson<{ name?: string; city?: string; sector?: string; phone?: string; whatsapp_opt_in?: boolean; email_opt_in?: boolean; role?: string; bio?: string }>(c);
+  const b = await readJson<{
+    name?: string;
+    city?: string;
+    sector?: string;
+    phone?: string;
+    whatsapp_opt_in?: boolean;
+    email_opt_in?: boolean;
+    role?: string;
+    bio?: string;
+  }>(c);
   const name = b.name === undefined ? user.name : clean(b.name, 80);
   if (name.length < 2) fail(400, "Escribe tu nombre (mínimo 2 caracteres)");
   const phone = b.phone === undefined ? user.phone : clean(b.phone, 30);
@@ -308,7 +323,9 @@ auth.get("/data-export", async (c) => {
     user: publicUser(user, c.env),
     consents: await q("SELECT kind,value,recorded_at FROM consent_records WHERE user_id=?"),
     practitioner: await q("SELECT slug,display_name,specialty,status,verification,city,sector,created_at FROM practitioners WHERE user_id=?"),
-    appointments: await q("SELECT id,practitioner_id,status,modality,start_ms,end_ms,price_cents,payment_status,created_at FROM appointments WHERE patient_id=?1 OR pro_user_id=?1"),
+    appointments: await q(
+      "SELECT id,practitioner_id,status,modality,start_ms,end_ms,price_cents,payment_status,created_at FROM appointments WHERE patient_id=?1 OR pro_user_id=?1",
+    ),
     payments: await q("SELECT id,kind,amount_cents,status,provider,card_brand,card_last4,created_at FROM payments WHERE payer_id=?"),
     messages: await q("SELECT appointment_id,body,created_at FROM messages WHERE sender_id=?"),
     reviews: await q("SELECT appointment_id,rating,body,created_at FROM reviews WHERE author_id=?"),

@@ -1,7 +1,7 @@
 import { useId, useState } from "react";
 import { Link, useRevalidator, useSearchParams } from "react-router";
 import { GoogleButton } from "../components/account/GoogleButton";
-import { CITY_OPTIONS, destinationFor } from "../components/account/redirect";
+import { destinationFor } from "../components/account/redirect";
 import { Icon } from "../components/Icon";
 import { Notice, PageHeader, PasswordInput, Spinner } from "../components/ui";
 import { ApiError, api } from "../lib/api";
@@ -11,11 +11,11 @@ import type { Route } from "./+types/cuenta";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Mi cuenta · buscaDR" },
-  { name: "description", content: "Entra o crea tu cuenta buscaDR para alquilar herramientas y equipos o publicar los tuyos en Guayaquil, Samborondón y Daule." },
+  { name: "description", content: "Entra o crea tu cuenta buscaDR para reservar citas médicas o gestionar tu agenda como profesional de la salud." },
   { name: "robots", content: "noindex" },
 ];
 
-const ROLE_LABEL: Record<SessionUser["role"], string> = { renter: "Arrendatario", owner: "Propietario" };
+const ROLE_LABEL: Record<SessionUser["role"], string> = { patient: "Paciente", pro: "Profesional de la salud" };
 
 function errorText(e: unknown) {
   if (e instanceof ApiError) {
@@ -25,23 +25,27 @@ function errorText(e: unknown) {
   return "No se pudo completar la acción. Inténtalo de nuevo.";
 }
 
+function useCities() {
+  return (useRootData()?.catalog.cities ?? []).map((c) => c.name);
+}
+
 export default function Cuenta() {
   const data = useRootData();
   const user = data?.user;
-  return <div className="container-page max-w-3xl">{user ? <AccountView user={user} /> : <AuthView />}</div>;
+  return <div className="container-page max-w-3xl pt-6 sm:pt-8">{user ? <AccountView user={user} /> : <AuthView />}</div>;
 }
 
 /* ------------------------------ Sin sesión ------------------------------ */
 
 function AuthView() {
   const [params] = useSearchParams();
-  const [tab, setTab] = useState<"login" | "register">(params.get("tab") === "registro" || params.get("rol") === "propietario" ? "register" : "login");
+  const [tab, setTab] = useState<"login" | "register">(params.get("tab") === "registro" || params.get("rol") === "profesional" ? "register" : "login");
   return (
     <>
-      <PageHeader eyebrow="TU CUENTA buscaDR" title={tab === "login" ? "Entra a tu cuenta" : "Crea tu cuenta"}>
-        Una sola cuenta para alquilar equipos cerca de ti y para publicar los tuyos.
+      <PageHeader eyebrow="Tu cuenta buscaDR" title={tab === "login" ? "Entra a tu cuenta" : "Crea tu cuenta"}>
+        Una sola cuenta para reservar citas y, si eres profesional de la salud, para gestionar tu agenda.
       </PageHeader>
-      <div role="tablist" aria-label="Acceso" className="mb-6 inline-flex rounded-full bg-white p-1 ring-1 ring-black/10">
+      <div role="tablist" aria-label="Acceso" className="mb-6 inline-flex max-w-full rounded-full bg-white p-1 ring-1 ring-tinta/10">
         {(
           [
             ["login", "Entrar"],
@@ -56,7 +60,7 @@ function AuthView() {
             aria-selected={tab === key}
             aria-controls={`panel-${key}`}
             onClick={() => setTab(key)}
-            className={`min-h-11 rounded-full px-5 text-sm font-semibold ${tab === key ? "bg-morado text-white" : "text-tinta hover:bg-black/5"}`}
+            className={`min-h-11 rounded-full px-5 text-sm font-semibold ${tab === key ? "bg-azul text-white" : "text-tinta hover:bg-tinta/5"}`}
           >
             {label}
           </button>
@@ -77,7 +81,7 @@ function useGoogleAuth() {
     setMessage(null);
     try {
       const res = await api<{ user: SessionUser }>("/api/auth/google", { body: { credential, ...extra } });
-      window.location.assign(destinationFor(res.user.role, params.get("next"), res.user.admin));
+      window.location.assign(destinationFor(res.user.role, params.get("next"), res.user.cms, extra.intent === "register"));
     } catch (e) {
       if (e instanceof ApiError && e.code === "GOOGLE_LINK_REQUIRED") {
         setMessage("Ese correo ya tiene una cuenta buscaDR. Entra con tu contraseña y luego vincula Google desde «Mi cuenta».");
@@ -87,6 +91,18 @@ function useGoogleAuth() {
     }
   }
   return { enabled: !!data?.google?.enabled && !!data.google.clientId, clientId: data?.google?.clientId ?? "", send, message };
+}
+
+function ErrorBox({ error }: { error: string | null }) {
+  return (
+    <div aria-live="assertive">
+      {error && (
+        <p role="alert" className="rounded-xl bg-alerta/5 px-4 py-3 text-sm text-alerta-ink ring-1 ring-alerta/30">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function LoginForm({ onSwitch }: { onSwitch: () => void }) {
@@ -103,7 +119,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
     setError(null);
     try {
       const res = await api<{ user: SessionUser }>("/api/auth/login", { body: { email: f.get("email"), password: f.get("password") } });
-      window.location.assign(destinationFor(res.user.role, params.get("next"), res.user.admin));
+      window.location.assign(destinationFor(res.user.role, params.get("next"), res.user.cms));
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -112,7 +128,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
 
   return (
     <div className="card p-5 sm:p-8">
-      <form onSubmit={submit} className="grid gap-4" noValidate={false}>
+      <form onSubmit={submit} className="grid gap-4">
         <div className="field">
           <label htmlFor={`${id}-email`}>Correo electrónico</label>
           <input id={`${id}-email`} name="email" type="email" autoComplete="email" required className="input" />
@@ -121,19 +137,13 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
           <label htmlFor={`${id}-pass`}>Contraseña</label>
           <PasswordInput id={`${id}-pass`} name="password" autoComplete="current-password" />
         </div>
-        <div aria-live="assertive">
-          {error && (
-            <p role="alert" className="rounded-xl bg-alerta/5 px-4 py-3 text-sm text-alerta ring-1 ring-alerta/30">
-              {error}
-            </p>
-          )}
-        </div>
+        <ErrorBox error={error} />
         <button type="submit" className="btn-primary w-full" disabled={busy}>
           {busy ? <Spinner label="Entrando" /> : null} Entrar
         </button>
       </form>
       {google.enabled && (
-        <div className="mt-6 border-t border-black/10 pt-6">
+        <div className="mt-6 border-t border-tinta/10 pt-6">
           <p className="mb-3 text-center text-sm muted">o continúa con</p>
           <GoogleButton clientId={google.clientId} onCredential={(c) => google.send(c, { intent: "login" })} />
           {google.message && (
@@ -145,7 +155,7 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
       )}
       <p className="mt-6 text-center text-sm muted">
         ¿Aún no tienes cuenta?{" "}
-        <button type="button" onClick={onSwitch} className="font-semibold text-morado underline underline-offset-2">
+        <button type="button" onClick={onSwitch} className="font-semibold text-azul underline underline-offset-2">
           Créala gratis
         </button>
       </p>
@@ -155,7 +165,8 @@ function LoginForm({ onSwitch }: { onSwitch: () => void }) {
 
 function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
   const [params] = useSearchParams();
-  const [role, setRole] = useState<"renter" | "owner">(params.get("rol") === "propietario" ? "owner" : "renter");
+  const cities = useCities();
+  const [role, setRole] = useState<"patient" | "pro">(params.get("rol") === "profesional" ? "pro" : "patient");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [consent, setConsent] = useState(false);
@@ -167,7 +178,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     if (String(f.get("password") ?? "").length < 10) return setError("La contraseña necesita mínimo 10 caracteres.");
-    if (!consent) return setError("Debes aceptar las condiciones del piloto y la política de privacidad.");
+    if (!consent) return setError("Debes aceptar los términos y la política de privacidad.");
     setBusy(true);
     setError(null);
     try {
@@ -184,7 +195,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
           acceptTerms: true,
         },
       });
-      window.location.assign(destinationFor(res.user.role, params.get("next") ?? (role === "owner" ? "/publicar" : null)));
+      window.location.assign(destinationFor(res.user.role, params.get("next"), res.user.cms, true));
     } catch (err) {
       setError(errorText(err));
       setBusy(false);
@@ -195,23 +206,23 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
     <div className="card p-5 sm:p-8">
       <form onSubmit={submit} className="grid gap-5">
         <fieldset>
-          <legend className="mb-2 text-sm font-semibold">¿Qué quieres hacer primero? (luego puedes hacer ambas)</legend>
+          <legend className="mb-2 text-sm font-semibold">¿Cómo usarás buscaDR? (luego puedes cambiarlo)</legend>
           <div className="grid gap-3 sm:grid-cols-2">
             {(
               [
-                ["renter", "Alquilar equipos", "Encuentra herramientas y equipos cerca de ti, por horas o días.", "search"],
-                ["owner", "Publicar mis equipos", "Genera ingresos con lo que tienes guardado. Publicar es gratis.", "money"],
+                ["patient", "Soy paciente", "Busca médicos, compara tarifas y reserva citas presenciales o virtuales.", "search"],
+                ["pro", "Soy profesional o clínica", "Recibe citas con agenda propia, avisos por WhatsApp y cobros en línea.", "stethoscope"],
               ] as const
             ).map(([value, title, text, icon]) => (
               <label
                 key={value}
-                className={`card flex cursor-pointer gap-3 p-4 ring-2 transition ${role === value ? "ring-morado" : "ring-transparent hover:ring-morado/30"}`}
+                className={`card flex cursor-pointer gap-3 p-4 ring-2 transition ${role === value ? "ring-azul" : "ring-transparent hover:ring-azul/30"}`}
               >
                 <input type="radio" name="role" value={value} checked={role === value} onChange={() => setRole(value)} className="sr-only" />
-                <span className={`grid size-10 shrink-0 place-items-center rounded-full ${role === value ? "bg-morado text-white" : "bg-lila text-morado"}`}>
+                <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${role === value ? "bg-azul text-white" : "tone-azul"}`}>
                   <Icon name={icon} className="size-5" />
                 </span>
-                <span>
+                <span className="min-w-0">
                   <span className="block font-semibold">{title}</span>
                   <span className="block text-sm muted">{text}</span>
                 </span>
@@ -222,7 +233,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="field sm:col-span-2">
-            <label htmlFor={`${id}-name`}>Nombre y apellido</label>
+            <label htmlFor={`${id}-name`}>{role === "pro" ? "Nombre y apellido (o nombre del centro)" : "Nombre y apellido"}</label>
             <input id={`${id}-name`} name="name" autoComplete="name" required minLength={2} maxLength={80} className="input" />
           </div>
           <div className="field">
@@ -236,14 +247,14 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
           <div className="field">
             <label htmlFor={`${id}-city`}>Ciudad</label>
             <select id={`${id}-city`} value={city} onChange={(e) => setCity(e.target.value)} className="input">
-              {CITY_OPTIONS.map((z) => (
+              {cities.map((z) => (
                 <option key={z}>{z}</option>
               ))}
             </select>
           </div>
           <div className="field">
             <label htmlFor={`${id}-phone`}>
-              Celular <span className="font-normal muted">(para avisos por WhatsApp)</span>
+              Celular <span className="font-normal muted">(avisos por WhatsApp)</span>
             </label>
             <input id={`${id}-phone`} name="phone" type="tel" inputMode="tel" autoComplete="tel" placeholder="09XXXXXXXX" maxLength={30} className="input" />
           </div>
@@ -257,10 +268,10 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
 
         <div className="grid gap-3 rounded-2xl bg-fondo p-4 text-sm">
           <label className="flex items-start gap-3">
-            <input type="checkbox" name="whatsapp" className="mt-1 size-5 accent-[var(--color-morado)]" />
+            <input type="checkbox" name="whatsapp" defaultChecked className="mt-1 size-5 shrink-0 accent-[var(--color-azul)]" />
             <span>
-              Acepto recibir avisos de mis reservas por <strong>WhatsApp</strong> (solicitudes, confirmaciones y recordatorios). Es opcional y puedo retirarlo
-              cuando quiera desde «Mi cuenta».
+              Acepto recibir por <strong>WhatsApp</strong> las confirmaciones, cambios y recordatorios de mis citas
+              {role === "pro" ? " y las nuevas solicitudes con botones para confirmar o rechazar" : ""}. Es opcional y puedo retirarlo desde «Mi cuenta».
             </span>
           </label>
           <label className="flex items-start gap-3">
@@ -269,32 +280,26 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
               checked={consent}
               onChange={(e) => setConsent(e.target.checked)}
               required
-              className="mt-1 size-5 accent-[var(--color-morado)]"
+              className="mt-1 size-5 shrink-0 accent-[var(--color-azul)]"
             />
             <span>
-              Acepto las{" "}
-              <Link to="/como-funciona#piloto" className="font-semibold text-morado underline underline-offset-2">
-                condiciones del piloto y la política de privacidad
+              Acepto los{" "}
+              <Link to="/privacidad" className="font-semibold text-azul underline underline-offset-2">
+                términos y la política de privacidad
               </Link>
-              : entorno de prueba en Guayaquil, Samborondón y Daule, sin cobros dentro de la plataforma. Soy mayor de 18 años.
+              . Entiendo que buscaDR conecta pacientes y profesionales y no reemplaza la atención de emergencias. Soy mayor de 18 años.
             </span>
           </label>
         </div>
 
-        <div aria-live="assertive">
-          {error && (
-            <p role="alert" className="rounded-xl bg-alerta/5 px-4 py-3 text-sm text-alerta ring-1 ring-alerta/30">
-              {error}
-            </p>
-          )}
-        </div>
+        <ErrorBox error={error} />
         <button type="submit" className="btn-primary w-full" disabled={busy}>
-          {busy ? <Spinner label="Creando cuenta" /> : null} {role === "owner" ? "Crear cuenta y publicar" : "Crear mi cuenta"}
+          {busy ? <Spinner label="Creando cuenta" /> : null} {role === "pro" ? "Crear cuenta y configurar mi agenda" : "Crear mi cuenta"}
         </button>
       </form>
 
       {google.enabled && (
-        <div className="mt-6 border-t border-black/10 pt-6">
+        <div className="mt-6 border-t border-tinta/10 pt-6">
           <p className="mb-3 text-center text-sm muted">o regístrate con Google (usa el perfil y la ciudad elegidos arriba)</p>
           {consent ? (
             <GoogleButton
@@ -303,7 +308,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
               onCredential={(c) => google.send(c, { intent: "register", role, acceptTerms: true, city })}
             />
           ) : (
-            <p className="text-center text-sm muted">Acepta las condiciones del piloto para habilitar el registro con Google.</p>
+            <p className="text-center text-sm muted">Acepta los términos para habilitar el registro con Google.</p>
           )}
           {google.message && (
             <p role="alert" className="mt-3 text-center text-sm">
@@ -314,7 +319,7 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
       )}
       <p className="mt-6 text-center text-sm muted">
         ¿Ya tienes cuenta?{" "}
-        <button type="button" onClick={onSwitch} className="font-semibold text-morado underline underline-offset-2">
+        <button type="button" onClick={onSwitch} className="font-semibold text-azul underline underline-offset-2">
           Entra aquí
         </button>
       </p>
@@ -326,13 +331,14 @@ function RegisterForm({ onSwitch }: { onSwitch: () => void }) {
 
 function AccountView({ user }: { user: SessionUser }) {
   const data = useRootData();
+  const cities = useCities();
   const revalidator = useRevalidator();
   const id = useId();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const [googleMsg, setGoogleMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const googleEnabled = !!data?.google?.enabled && !!data.google.clientId && !user.admin;
+  const googleEnabled = !!data?.google?.enabled && !!data.google.clientId && !user.cms;
   const invite = user.referral_code ? `${data?.origin ?? ""}/cuenta?tab=registro&ref=${user.referral_code}` : null;
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
@@ -350,6 +356,7 @@ function AccountView({ user }: { user: SessionUser }) {
           sector: f.get("sector"),
           role: f.get("role"),
           whatsapp_opt_in: f.get("whatsapp") === "on",
+          email_opt_in: f.get("email_opt") === "on",
         },
       });
       setStatus({ tone: "success", text: res.message });
@@ -392,12 +399,12 @@ function AccountView({ user }: { user: SessionUser }) {
 
   return (
     <>
-      <PageHeader eyebrow="TU CUENTA buscaDR" title={`Hola, ${user.name.split(" ")[0]}`}>
-        Tus datos, tus avisos por WhatsApp y tu código de invitación.
+      <PageHeader eyebrow="Tu cuenta buscaDR" title={`Hola, ${user.name.split(" ")[0]}`}>
+        Tus datos, tus avisos por WhatsApp y correo, y tu código de invitación.
       </PageHeader>
 
       <section aria-labelledby="perfil-titulo" className="card mb-6 flex flex-wrap items-center gap-4 p-5">
-        <span className="grid size-14 place-items-center rounded-full bg-morado font-display text-xl font-bold text-white" aria-hidden>
+        <span className="grid size-14 shrink-0 place-items-center rounded-full bg-azul font-display text-xl font-bold text-white" aria-hidden>
           {user.name.slice(0, 1).toUpperCase()}
         </span>
         <div className="min-w-0 flex-1">
@@ -407,25 +414,25 @@ function AccountView({ user }: { user: SessionUser }) {
           <p className="truncate text-sm muted">{user.email}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="chip bg-lila text-morado">{user.admin ? "Administración" : ROLE_LABEL[user.role]}</span>
+          <span className="chip tone-azul">{user.cms ? "Propietario de buscaDR" : ROLE_LABEL[user.role]}</span>
           <span className="chip bg-gris-claro">
             <Icon name="pin" className="size-4" /> {user.city}
           </span>
         </div>
         <div className="flex w-full flex-wrap gap-2">
-          <Link to="/reservas" className="btn-outline">
-            Mis reservas
+          <Link to="/citas" className="btn-outline btn-sm">
+            <Icon name="calendar" className="size-4" /> Mis citas
           </Link>
-          <Link to="/panel" className="btn-outline">
-            Mis equipos
+          <Link to="/panel" className="btn-outline btn-sm">
+            <Icon name="stethoscope" className="size-4" /> {user.role === "pro" ? "Mi consultorio" : "Soy profesional"}
           </Link>
-          {user.admin && (
+          {user.cms && (
             <>
-              <Link to="/admin" className="btn-primary">
+              <Link to="/admin" className="btn-primary btn-sm">
                 Administración <Icon name="arrow" className="size-4" />
               </Link>
-              <a href="/maestro" className="btn-accent">
-                CMS Maestro
+              <a href="/maestro" className="btn-dark btn-sm">
+                <Icon name="palette" className="size-4" /> CMS Maestro
               </a>
             </>
           )}
@@ -434,7 +441,7 @@ function AccountView({ user }: { user: SessionUser }) {
 
       <section id="whatsapp" aria-labelledby="pref-titulo" className="card mb-6 scroll-mt-24 p-5 sm:p-6">
         <h2 id="pref-titulo" className="text-xl font-bold">
-          Datos y avisos por WhatsApp
+          Datos y avisos
         </h2>
         <form onSubmit={save} className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="field sm:col-span-2">
@@ -456,35 +463,34 @@ function AccountView({ user }: { user: SessionUser }) {
           </div>
           <div className="field">
             <label htmlFor={`${id}-city`}>Ciudad</label>
-            <select id={`${id}-city`} name="city" defaultValue={CITY_OPTIONS.includes(user.city as never) ? user.city : "Guayaquil"} className="input">
-              {CITY_OPTIONS.map((z) => (
+            <select id={`${id}-city`} name="city" defaultValue={cities.includes(user.city) ? user.city : "Guayaquil"} className="input">
+              {cities.map((z) => (
                 <option key={z}>{z}</option>
               ))}
             </select>
           </div>
           <div className="field">
             <label htmlFor={`${id}-sector`}>Sector</label>
-            <input
-              id={`${id}-sector`}
-              name="sector"
-              defaultValue={user.sector}
-              maxLength={60}
-              className="input"
-              placeholder="Urdesa, La Puntilla, Villa Club…"
-            />
+            <input id={`${id}-sector`} name="sector" defaultValue={user.sector} maxLength={60} className="input" placeholder="Urdesa, Kennedy, La Puntilla…" />
           </div>
           <div className="field">
             <label htmlFor={`${id}-role`}>Perfil principal</label>
             <select id={`${id}-role`} name="role" defaultValue={user.role} className="input">
-              <option value="renter">Alquilo equipos</option>
-              <option value="owner">Publico equipos</option>
+              <option value="patient">Paciente</option>
+              <option value="pro">Profesional de la salud</option>
             </select>
           </div>
-          <label className="flex items-start gap-3 rounded-2xl bg-turquesa/10 p-4 text-sm sm:col-span-2">
-            <input type="checkbox" name="whatsapp" defaultChecked={user.whatsapp_opt_in} className="mt-1 size-5 accent-[var(--color-morado)]" />
+          <label className="flex items-start gap-3 rounded-2xl tone-card-verde p-4 text-sm sm:col-span-2">
+            <input type="checkbox" name="whatsapp" defaultChecked={user.whatsapp_opt_in} className="mt-1 size-5 shrink-0 accent-[var(--color-azul)]" />
             <span>
-              <strong>Avisos por WhatsApp.</strong> Recibe solicitudes con botones para aceptar o rechazar, confirmaciones y recordatorios de retiro. Puedes
-              publicar enviando una foto al número de buscaDR. Guardamos tu decisión como registro de consentimiento; puedes retirarla cuando quieras.
+              <strong>Avisos por WhatsApp.</strong> Confirmaciones, cambios, recordatorios 24 h y 1 h antes y enlace a la videoconsulta. Si eres profesional,
+              recibes cada solicitud con botones para confirmar o rechazar. Guardamos tu decisión como registro de consentimiento.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 rounded-2xl bg-fondo p-4 text-sm sm:col-span-2">
+            <input type="checkbox" name="email_opt" defaultChecked={user.email_opt_in} className="mt-1 size-5 shrink-0 accent-[var(--color-azul)]" />
+            <span>
+              <strong>Avisos por correo.</strong> Copia de las confirmaciones y recibos de pago en {user.email}.
             </span>
           </label>
           <div className="sm:col-span-2" aria-live="polite">
@@ -501,14 +507,14 @@ function AccountView({ user }: { user: SessionUser }) {
       {invite && (
         <section aria-labelledby="ref-titulo" className="card mb-6 p-5 sm:p-6">
           <h2 id="ref-titulo" className="text-xl font-bold">
-            Invita a tus vecinos
+            Invita a otros
           </h2>
-          <p className="mt-1 text-sm muted">Comparte tu enlace. Registramos quién llegó por ti para futuros beneficios cuando completen su primer alquiler.</p>
+          <p className="mt-1 text-sm muted">Comparte tu enlace con pacientes o colegas. Registramos quién llegó por ti para futuros beneficios.</p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <code className="rounded-xl bg-fondo px-3 py-2 font-mono text-lg font-bold tracking-wider">{user.referral_code}</code>
+            <code className="max-w-full rounded-xl bg-fondo px-3 py-2 font-mono text-lg font-bold tracking-wider break-all">{user.referral_code}</code>
             <button
               type="button"
-              className="btn-outline min-h-10 px-4 text-sm"
+              className="btn-outline btn-sm"
               onClick={() =>
                 navigator.clipboard
                   .writeText(invite)
@@ -519,8 +525,8 @@ function AccountView({ user }: { user: SessionUser }) {
               <Icon name="share" className="size-4" /> {copied ? "¡Copiado!" : "Copiar enlace"}
             </button>
             <a
-              className="btn-ghost min-h-10 px-4 text-sm"
-              href={`https://wa.me/?text=${encodeURIComponent(`Te invito a buscaDR para alquilar herramientas y equipos cerca: ${invite}`)}`}
+              className="btn-ghost btn-sm"
+              href={`https://wa.me/?text=${encodeURIComponent(`Reserva tu cita médica en buscaDR: ${invite}`)}`}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -548,11 +554,11 @@ function AccountView({ user }: { user: SessionUser }) {
           Tus datos personales
         </h2>
         <p className="mt-1 text-sm muted">
-          Según la Ley Orgánica de Protección de Datos Personales puedes acceder a tus datos. Descarga una copia en JSON con tu perfil, consentimientos,
-          anuncios, reservas, mensajes, reseñas y favoritos.
+          Según la Ley Orgánica de Protección de Datos Personales puedes acceder a tus datos. Descarga una copia en JSON con tu perfil, consentimientos, citas,
+          pagos, mensajes, opiniones y favoritos.
         </p>
         <button type="button" onClick={exportData} className="btn-outline mt-4">
-          Descargar mis datos
+          <Icon name="download" className="size-4" /> Descargar mis datos
         </button>
       </section>
 

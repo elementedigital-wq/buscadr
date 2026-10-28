@@ -1,9 +1,9 @@
-# ADR 0002 — D1 única con migraciones aditivas automáticas
+# ADR 0002 — Una base D1 y migraciones aditivas automáticas
 
-**Estado:** aceptada (26-oct-2026)
+**Estado:** aceptada (28-oct-2026)
 
-**Contexto.** La v0.3 separaba identidad (D1) y marketplace (PostgreSQL/PostGIS, nunca desplegado). Ejecutar SQL a mano en el panel generó errores de «tablas no listas».
+**Contexto.** El despliegue debe funcionar sin pasos manuales y sin riesgo para los datos existentes.
 
-**Decisión.** Todo en D1 `buscadr-db`. Migraciones en `migrations/`, estrictamente aditivas, ≤ 45 sentencias, aplicadas por el Worker en el primer request (registro en `d1_migrations`, compatible con Wrangler). Búsqueda geográfica con caja + haversine. PostGIS queda como referencia en `infrastructure/postgis/` si el volumen lo exige.
+**Decisión.** Una D1 (`DB` → `buscadr-db`). Las migraciones de `migrations/` son **aditivas** (nunca `DROP`, borrados masivos, renombres ni cambios de tipo), de ≤ 45 sentencias, y se aplican solas en el primer request (`server/db/migrate.ts`). Los datos de muestra se insertan con `INSERT … SELECT … WHERE NOT EXISTS` para ser idempotentes. R2 (`MEDIA`) es opcional: sin él, imágenes y fuentes se guardan en D1 por bloques.
 
-**Consecuencias.** Cero pasos manuales al desplegar; recuperación con D1 Time Travel. Límite práctico de D1 (10 GB, escrituras serializadas) suficiente para el piloto y bastante más.
+**Consecuencias.** Un deploy basta para actualizar el esquema. Corregir un error exige una migración nueva, nunca editar una aplicada (`docs/OPERACION_D1.md`).

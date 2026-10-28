@@ -27,7 +27,7 @@ export function fontAssets(cms: Cms | null | undefined) {
     .flatMap((f) =>
       f.files.map(
         (file) =>
-          `@font-face{font-family:"${f.family.replace(/[^A-Za-z0-9 ]/g, "")}";src:url("${file.url.replace(/[^a-zA-Z0-9/._-]/g, "")}") format("${fmt(file.url)}");font-weight:${f.source === "google" ? "100 900" : Number(file.weight) || 400};font-style:${file.style === "italic" ? "italic" : "normal"};font-display:swap}`,
+          `@font-face{font-family:"${f.family.replace(/[^A-Za-z0-9 ]/g, "")}";src:url("${file.url.replace(/[^a-zA-Z0-9/._-]/g, "")}") format("${fmt(file.url)}");font-weight:${f.source === "google" && f.files.length === 1 ? "100 900" : Number(file.weight) || 400};font-style:${file.style === "italic" ? "italic" : "normal"};font-display:swap}`,
       ),
     )
     .join("");

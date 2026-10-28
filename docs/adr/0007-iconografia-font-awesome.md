@@ -1,9 +1,12 @@
-# ADR 0007 — Iconografía con Font Awesome Free, editable desde el CMS
+# ADR 0007 — Iconografía Font Awesome Free: catálogo curado + librería completa desde el CMS
 
-**Estado:** aceptada (26-oct-2026)
+**Estado:** aceptada (28-oct-2026)
 
-**Contexto.** Los iconos de interfaz eran trazos SVG dibujados a mano y los de categoría, ilustraciones fijas. El propietario pidió una iconografía al estilo de una librería (Font Awesome), funcional en el front end y editable desde el CMS.
+**Contexto.** Se pidió una iconografía «como Font Awesome», 100 % funcional en el front end y editable desde el back end.
 
-**Decisión.** Catálogo curado de Font Awesome Free 7 (sólidos, de contorno y marcas; CC BY 4.0 / MIT) generado por `scripts/build-icons.mjs` en `app/lib/icon-data.ts` (solo rutas SVG, ~52 KB comprimido). Un único componente `Icon` (con alias para los nombres históricos) y `CmsIcon` (icono del catálogo o imagen subida). El CMS guarda nombres validados en el servidor (`isIconName`) o rutas de imagen permitidas. Los recuadros de icono usan tonos derivados de la paleta de marca con `color-mix` (sin colores nuevos).
+**Decisión.**
+- Catálogo curado (≈290 íconos médicos, de agenda, pagos e interfaz; sólidos, de contorno y marcas) generado por `scripts/build-icons.mjs` desde `scripts/icon-list.mjs` en `app/lib/icon-data.ts` (solo trazados SVG). Es lo único que se envía al navegador.
+- El CMS también busca en la **librería completa** de Font Awesome Free (más de 2.000 íconos) desde el servidor (`GET /api/cms/icons`, términos en español: «pediatría», «corazón», «cita»…). Al elegir uno fuera del catálogo se guarda su trazado en `theme.iconLibrary` (validado: nombre, tamaño y trazado solo con comandos SVG) y el componente `Icon` lo dibuja en todo el sitio mediante `IconLibraryContext`.
+- También se admite una imagen subida como ícono propio de la marca. Recuadros de ícono con tonos derivados de la paleta (`tone-*`).
 
-**Consecuencias.** Iconos coherentes, accesibles (`aria-hidden` o `aria-label`) y editables sin desarrollo. Ampliar el catálogo es una línea en `scripts/icon-list.mjs`. Las ilustraciones del Brand Deck siguen disponibles como imagen y como respaldo de foto.
+**Consecuencias.** El sitio no carga la librería completa (≈2 MB): solo el catálogo y los íconos elegidos. Licencia CC BY 4.0 / MIT (`docs/CREDITOS.md`).

@@ -53,7 +53,14 @@ export const BLOCK_SQL = "SELECT 1 FROM availability_blocks b WHERE b.practition
 export type Role = "patient" | "pro" | "admin";
 export type Action = "confirm" | "decline" | "cancel" | "complete" | "no_show" | "reschedule" | "review" | "pay" | "mark_paid";
 
-type Snapshot = { status: AppointmentStatus; start_ms: number; end_ms: number; hold_expires_ms: number | null; payment_mode: string; payment_status: PaymentStatus };
+type Snapshot = {
+  status: AppointmentStatus;
+  start_ms: number;
+  end_ms: number;
+  hold_expires_ms: number | null;
+  payment_mode: string;
+  payment_status: PaymentStatus;
+};
 
 /** Acciones disponibles según estado y quién mira. En perfiles de muestra el paciente puede simular los pasos del profesional. */
 export function availableActions(a: Snapshot, role: Role, opts: { demo: boolean; reviewed: boolean; now?: number }): Action[] {
@@ -131,7 +138,11 @@ export function maskContact(text: string) {
 
 /** Archivo iCalendar (.ics) de una cita para agregarla al calendario del teléfono. */
 export function icsFor(a: { id: number; start_ms: number; end_ms: number; modality: string; title: string; location: string; url: string }) {
-  const stamp = (ms: number) => new Date(ms).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const stamp = (ms: number) =>
+    new Date(ms)
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}/, "");
   const esc = (s: string) => s.replace(/[\\;,]/g, (m) => `\\${m}`).replace(/\n/g, "\\n");
   return [
     "BEGIN:VCALENDAR",

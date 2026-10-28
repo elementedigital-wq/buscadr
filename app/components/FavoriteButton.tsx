@@ -18,7 +18,7 @@ export function FavoriteButton({ id, initial = false, className = "" }: { id: nu
     }
     setBusy(true);
     try {
-      const res = await api<{ favorite: boolean }>(`/api/me/favorites/${id}`, { body: {} });
+      const res = await api<{ favorite: boolean }>(`/api/me/favorites/${id}`, { method: on ? "DELETE" : "PUT" });
       setOn(res.favorite);
     } finally {
       setBusy(false);
@@ -31,9 +31,9 @@ export function FavoriteButton({ id, initial = false, className = "" }: { id: nu
       disabled={busy}
       aria-pressed={on}
       aria-label={on ? "Quitar de favoritos" : "Guardar en favoritos"}
-      className={`grid size-10 shrink-0 place-items-center rounded-full bg-white/95 shadow ring-1 ring-black/5 transition hover:scale-105 ${className}`}
+      className={`grid size-10 shrink-0 place-items-center rounded-full bg-white/95 shadow-sm ring-1 ring-tinta/10 transition hover:scale-105 ${className}`}
     >
-      <Icon name={on ? "heart" : "regular:heart"} className={`size-5 ${on ? "text-morado" : "text-tinta"}`} />
+      <Icon name={on ? "heart" : "regular:heart"} className={`size-[18px] ${on ? "text-[#e11d48]" : "text-tinta"}`} />
     </button>
   );
 }

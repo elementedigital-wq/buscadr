@@ -41,7 +41,9 @@ me.get("/home", async (c) => {
 me.get("/notifications", async (c) => {
   const user = requireUser(c);
   const rows = (
-    await c.env.DB.prepare("SELECT id,kind,title,body,link,read_at,created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 40").bind(user.id).all<Record<string, any>>()
+    await c.env.DB.prepare("SELECT id,kind,title,body,link,read_at,created_at FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 40")
+      .bind(user.id)
+      .all<Record<string, any>>()
   ).results;
   return c.json({ items: rows, unread: rows.filter((r) => !r.read_at).length });
 });

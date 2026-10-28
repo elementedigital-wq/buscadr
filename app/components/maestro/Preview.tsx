@@ -66,7 +66,7 @@ export function Preview({ config, pages, onFocusPath }: { config: Cms; pages: { 
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-black/5 bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-tinta/5 bg-white p-3">
         <label htmlFor="preview-page" className="sr-only">
           Página de la vista previa
         </label>
@@ -102,7 +102,7 @@ export function Preview({ config, pages, onFocusPath }: { config: Cms; pages: { 
           type="button"
           aria-pressed={select}
           onClick={() => setSelect((v) => !v)}
-          className={`chip min-h-9 text-xs font-semibold ${select ? "bg-morado text-white" : "bg-fondo text-tinta ring-1 ring-black/10"}`}
+          className={`chip min-h-9 text-xs font-semibold ${select ? "bg-azul text-white" : "bg-fondo text-tinta ring-1 ring-tinta/10"}`}
           title="Con esta opción activa, un clic en el sitio abre el campo que lo edita. Desactívala para navegar."
         >
           {select ? "Clic para editar" : "Navegar"}
@@ -111,7 +111,7 @@ export function Preview({ config, pages, onFocusPath }: { config: Cms; pages: { 
           href={current.replace(/[?&]cms_preview=1$/, "").replace("?cms_preview=1&", "?")}
           target="_blank"
           rel="noopener"
-          className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-morado"
+          className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-azul"
         >
           Abrir publicado <Icon name="arrow" className="size-3.5" />
         </a>
@@ -123,13 +123,13 @@ export function Preview({ config, pages, onFocusPath }: { config: Cms; pages: { 
             key={src}
             src={src}
             title="Vista previa del sitio con el borrador"
-            className="origin-top-left rounded-xl border border-black/10 bg-white shadow-lg"
+            className="origin-top-left rounded-xl border border-tinta/10 bg-white shadow-lg"
             style={{ width, height, transform: `scale(${scale})` }}
           />
         </div>
         {!ready && <p className="absolute inset-x-0 top-6 text-center text-sm muted">Cargando vista previa…</p>}
       </div>
-      <p className="border-t border-black/5 bg-white px-3 py-2 text-xs muted">
+      <p className="border-t border-tinta/5 bg-white px-3 py-2 text-xs muted">
         Vista previa del <strong>borrador sin publicar</strong>: los visitantes siguen viendo la versión publicada.
       </p>
     </div>

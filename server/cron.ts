@@ -36,6 +36,11 @@ export async function scheduledMaintenance(env: Env, now = Date.now()) {
     db.prepare("DELETE FROM sessions WHERE expires_at<?").bind(now),
     db.prepare("DELETE FROM rate_limits WHERE blocked_until<? AND window_start<?").bind(now, now - DAY),
     db.prepare("DELETE FROM owner_resets WHERE expires_at<?").bind(now - DAY),
+    // Planes pedidos al reservar cuya primera consulta venció (ADR 0019).
+    db.prepare(
+      `UPDATE followup_plans SET status='cancelada',cancel_reason='La primera consulta venció sin confirmarse',updated_at=CURRENT_TIMESTAMP
+       WHERE status='propuesta' AND requested_by='patient' AND id IN (SELECT s.plan_id FROM followup_sessions s JOIN appointments a ON a.id=s.appointment_id WHERE s.seq=1 AND a.status='expirada')`,
+    ),
   ]);
   for (const a of expiring) {
     if (a.demo) continue;

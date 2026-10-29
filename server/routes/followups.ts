@@ -4,6 +4,8 @@
  *   adherencia y reagenda las sesiones que quedaron en conflicto.
  * - `/api/followups`: el paciente ve la propuesta y la acepta (se agendan todas las sesiones) o la
  *   rechaza; puede cancelar las sesiones que faltan.
+ * - Planes pedidos por el paciente al reservar (ADR 0019, `requested_by='patient'`): la primera
+ *   consulta es la cita reservada; el profesional acepta el plan (se agendan las demás) o lo rechaza.
  */
 import { Hono } from "hono";
 import type { AppBindings, Env, User } from "../env";
@@ -52,6 +54,9 @@ type PlanRow = {
   cancel_reason: string;
   accepted_at: string | null;
   created_at: string;
+  /** 'pro': propuesto por el profesional · 'patient': pedido por el paciente al reservar (ADR 0019). */
+  requested_by: "pro" | "patient";
+  template: string;
 };
 
 type SessionRow = {
@@ -110,6 +115,9 @@ function planView(
   const conflicts = count((x) => x.session_status === "conflicto");
   const expired = plan.status === "propuesta" && plan.expires_ms < now;
   const state = expired ? "vencida" : plan.status === "activa" && !upcoming.length && !conflicts ? "finalizada" : plan.status;
+  // Quién debe responder una propuesta: el paciente (la propuso el profesional) o el profesional (la pidió el paciente).
+  const responder = plan.requested_by === "patient" ? "pro" : "patient";
+  const pending = plan.status === "propuesta" && !expired;
   return {
     id: plan.id,
     title: plan.title,
@@ -119,7 +127,9 @@ function planView(
     price_cents: plan.price_cents,
     total_cents: plan.price_cents * items.length,
     status: state,
-    status_label: PLAN_LABEL[state],
+    status_label:
+      state === "propuesta" && plan.requested_by === "patient" ? (as === "pro" ? "Solicitud del paciente" : "Esperando al profesional") : PLAN_LABEL[state],
+    requested_by: plan.requested_by,
     expires_ms: plan.status === "propuesta" ? plan.expires_ms : null,
     created_at: plan.created_at,
     accepted_at: plan.accepted_at,
@@ -140,9 +150,9 @@ function planView(
       next: upcoming[0] ? { start_ms: upcoming[0].start_ms, appointment_id: upcoming[0].appointment_id, unpaid: upcoming[0].unpaid } : null,
     },
     can: {
-      accept: as === "patient" && plan.status === "propuesta" && !expired,
-      decline: as === "patient" && plan.status === "propuesta" && !expired,
-      cancel: (plan.status === "propuesta" && as === "pro" && !expired) || (plan.status === "activa" && (upcoming.length > 0 || conflicts > 0)),
+      accept: pending && as === responder,
+      decline: pending && as === responder,
+      cancel: (pending && as !== responder) || (plan.status === "activa" && (upcoming.length > 0 || conflicts > 0)),
     },
   };
 }
@@ -224,6 +234,29 @@ async function cancelRemaining(env: Env, plan: PlanRow, by: "patient" | "pro", r
   }
   await db.prepare("UPDATE followup_sessions SET status='omitida' WHERE plan_id=? AND status IN ('propuesta','conflicto')").bind(plan.id).run();
   return { cancelled, refunded };
+}
+
+/** Agenda las sesiones propuestas de una serie recién aceptada (conflictos quedan «por reagendar»). */
+async function activatePlan(env: Env, plan: PlanRow, p: PractitionerRow, now = Date.now()) {
+  const db = env.DB;
+  const settings = await getPayoutSettings(env);
+  const proposed = (
+    await db
+      .prepare("SELECT seq,start_ms FROM followup_sessions WHERE plan_id=? AND status='propuesta' ORDER BY seq")
+      .bind(plan.id)
+      .all<{ seq: number; start_ms: number }>()
+  ).results;
+  const scheduled: number[] = [];
+  let conflicts = 0;
+  for (const s of proposed) {
+    const id = s.start_ms > now + HOUR ? await scheduleSession(env, plan, p, s.seq, s.start_ms, settings.fee_bps, now) : null;
+    if (id) scheduled.push(id);
+    else {
+      conflicts++;
+      await db.prepare("UPDATE followup_sessions SET status='conflicto' WHERE plan_id=? AND seq=?").bind(plan.id, s.seq).run();
+    }
+  }
+  return { scheduled, conflicts };
 }
 
 /* ------------------------------------------------------------------ Profesional */
@@ -398,6 +431,7 @@ proFollowups.post("/:id/cancel", async (c) => {
   const p = await requirePractitioner(db, user);
   const plan = await loadProPlan(db, p, c.req.param("id"));
   if (!["propuesta", "activa"].includes(plan.status)) fail(409, "Esta serie ya no está activa.");
+  if (plan.status === "propuesta" && plan.requested_by === "patient") fail(409, "Es una solicitud del paciente: usa «Rechazar plan».");
   const reason = clean((await readJson<{ reason?: string }>(c)).reason, 200) || "Serie cancelada";
   const res = await cancelRemaining(c.env, plan, "pro", reason);
   await db
@@ -455,6 +489,87 @@ proFollowups.post("/:id/sessions/:seq", async (c) => {
   return c.json({ ok: true, appointment_id: id });
 });
 
+/** Acepta un plan pedido por el paciente: agenda las consultas siguientes (y confirma la primera si esperaba). */
+proFollowups.post("/:id/accept", async (c) => {
+  const user = requireUser(c);
+  const db = c.env.DB;
+  await hit(db, `write:${user.id}`, RULES.write);
+  const p = await requirePractitioner(db, user);
+  const plan = await loadProPlan(db, p, c.req.param("id"));
+  const now = Date.now();
+  if (plan.requested_by !== "patient" || plan.status !== "propuesta" || plan.expires_ms < now) fail(409, "Esta solicitud ya no está pendiente.");
+  const first = await db
+    .prepare(
+      "SELECT a.id,a.status,a.payment_status,a.hold_expires_ms FROM followup_sessions s JOIN appointments a ON a.id=s.appointment_id WHERE s.plan_id=? AND s.seq=1",
+    )
+    .bind(plan.id)
+    .first<{ id: number; status: string; payment_status: string; hold_expires_ms: number | null }>();
+  if (!first || !["solicitada", "confirmada"].includes(first.status)) fail(409, "La primera consulta del plan ya no está activa.");
+  if (first.payment_status === "pendiente" || first.payment_status === "fallido")
+    fail(409, "Espera a que el paciente pague la primera consulta para aceptar el plan.", "FIRST_UNPAID");
+  const taken = await db
+    .prepare("UPDATE followup_plans SET status='activa',accepted_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='propuesta'")
+    .bind(plan.id)
+    .run();
+  if (!taken.meta.changes) fail(409, "Esta solicitud ya fue respondida.");
+  // Aceptar el plan confirma también la primera consulta si seguía por confirmar.
+  if (first.status === "solicitada")
+    await db.batch([
+      db
+        .prepare(
+          "UPDATE appointments SET status='confirmada',confirmed_at=CURRENT_TIMESTAMP,hold_expires_ms=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='solicitada' AND hold_expires_ms>?",
+        )
+        .bind(first.id, now),
+      db
+        .prepare("INSERT INTO appointment_events(appointment_id,type,actor_id,detail) VALUES(?,?,?,?)")
+        .bind(first.id, "confirm", user.id, JSON.stringify({ plan: plan.id })),
+    ]);
+  const { scheduled, conflicts } = await activatePlan(c.env, plan, p, now);
+  const patient = await recipient(db, plan.patient_id);
+  // Sin el nombre del plan en el aviso (puede ser información de salud).
+  if (patient)
+    c.executionCtx.waitUntil(
+      notify(c.env, patient, {
+        kind: "plan_aceptado",
+        title: "Tu profesional aceptó tu plan de consultas",
+        body: `${fullName(p)} agendó ${scheduled.length + 1} consultas.${plan.price_cents ? " Paga cada una con tarjeta hasta 24 h antes." : ""}`,
+        link: `/seguimientos/${plan.id}`,
+        origin: origin(c),
+        ref: `serie:${plan.id}`,
+      }),
+    );
+  return c.json({ ok: true, scheduled: scheduled.length, conflicts });
+});
+
+proFollowups.post("/:id/decline", async (c) => {
+  const user = requireUser(c);
+  const db = c.env.DB;
+  await hit(db, `write:${user.id}`, RULES.write);
+  const p = await requirePractitioner(db, user);
+  const plan = await loadProPlan(db, p, c.req.param("id"));
+  if (plan.requested_by !== "patient") fail(409, "Esta serie la propusiste tú: usa «Retirar propuesta».");
+  const reason = clean((await readJson<{ reason?: string }>(c)).reason, 200);
+  const res = await db
+    .prepare("UPDATE followup_plans SET status='rechazada',cancel_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='propuesta'")
+    .bind(reason ? `Profesional: ${reason}` : "El profesional no aceptó el plan", plan.id)
+    .run();
+  if (!res.meta.changes) fail(409, "Esta solicitud ya fue respondida.");
+  await db.prepare("UPDATE followup_sessions SET status='omitida' WHERE plan_id=? AND status='propuesta'").bind(plan.id).run();
+  const patient = await recipient(db, plan.patient_id);
+  if (patient)
+    c.executionCtx.waitUntil(
+      notify(c.env, patient, {
+        kind: "plan_rechazado",
+        title: "Tu profesional no aceptó el plan de consultas",
+        body: `${fullName(p)} prefiere definir los controles en tu consulta. Tu primera cita se mantiene.`,
+        link: `/seguimientos/${plan.id}`,
+        origin: origin(c),
+        ref: `serie:${plan.id}`,
+      }),
+    );
+  return c.json({ ok: true });
+});
+
 /* ------------------------------------------------------------------ Paciente */
 
 export const followups = new Hono<AppBindings>();
@@ -499,6 +614,7 @@ followups.post("/:id/accept", async (c) => {
   await hit(db, `booking:${user.id}`, RULES.booking);
   const { plan, p, as } = await loadForUser(db, user, c.req.param("id"));
   if (as !== "patient") fail(404, "Serie no encontrada");
+  if (plan.requested_by === "patient") fail(409, "Este plan lo pediste tú: espera la respuesta del profesional.");
   const now = Date.now();
   if (plan.status !== "propuesta" || plan.expires_ms < now) fail(409, "Esta propuesta ya no está vigente. Pide a tu profesional una nueva.");
   const taken = await db
@@ -506,23 +622,7 @@ followups.post("/:id/accept", async (c) => {
     .bind(plan.id)
     .run();
   if (!taken.meta.changes) fail(409, "Esta propuesta ya fue respondida.");
-  const settings = await getPayoutSettings(c.env);
-  const proposed = (
-    await db
-      .prepare("SELECT seq,start_ms FROM followup_sessions WHERE plan_id=? AND status='propuesta' ORDER BY seq")
-      .bind(plan.id)
-      .all<{ seq: number; start_ms: number }>()
-  ).results;
-  const scheduled: number[] = [];
-  let conflicts = 0;
-  for (const s of proposed) {
-    const id = s.start_ms > now + HOUR ? await scheduleSession(c.env, plan, p, s.seq, s.start_ms, settings.fee_bps, now) : null;
-    if (id) scheduled.push(id);
-    else {
-      conflicts++;
-      await db.prepare("UPDATE followup_sessions SET status='conflicto' WHERE plan_id=? AND seq=?").bind(plan.id, s.seq).run();
-    }
-  }
+  const { scheduled, conflicts } = await activatePlan(c.env, plan, p, now);
   const pro = await recipient(db, p.user_id);
   if (pro)
     c.executionCtx.waitUntil(
@@ -557,6 +657,7 @@ followups.post("/:id/decline", async (c) => {
   await hit(db, `write:${user.id}`, RULES.write);
   const { plan, p, as } = await loadForUser(db, user, c.req.param("id"));
   if (as !== "patient") fail(404, "Serie no encontrada");
+  if (plan.requested_by === "patient") fail(409, "Este plan lo pediste tú: puedes retirarlo con «Retirar solicitud».");
   const reason = clean((await readJson<{ reason?: string }>(c)).reason, 200);
   const res = await db
     .prepare("UPDATE followup_plans SET status='rechazada',cancel_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='propuesta'")
@@ -585,8 +686,18 @@ followups.post("/:id/cancel", async (c) => {
   await hit(db, `write:${user.id}`, RULES.write);
   const { plan, p, as } = await loadForUser(db, user, c.req.param("id"));
   if (as !== "patient") fail(404, "Serie no encontrada");
-  if (plan.status !== "activa") fail(409, "Esta serie no está en curso.");
   const reason = clean((await readJson<{ reason?: string }>(c)).reason, 200) || "Serie cancelada";
+  // Retirar un plan pedido al reservar: la primera cita se mantiene; solo se descartan las siguientes.
+  if (plan.status === "propuesta" && plan.requested_by === "patient") {
+    const res = await db
+      .prepare("UPDATE followup_plans SET status='cancelada',cancel_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='propuesta'")
+      .bind("Paciente: retiró la solicitud", plan.id)
+      .run();
+    if (!res.meta.changes) fail(409, "Esta solicitud ya fue respondida.");
+    await db.prepare("UPDATE followup_sessions SET status='omitida' WHERE plan_id=? AND status='propuesta'").bind(plan.id).run();
+    return c.json({ ok: true, cancelled: 0, refunded: 0 });
+  }
+  if (plan.status !== "activa") fail(409, "Esta serie no está en curso.");
   const res = await cancelRemaining(c.env, plan, "patient", reason);
   await db
     .prepare("UPDATE followup_plans SET status='cancelada',cancel_reason=?,updated_at=CURRENT_TIMESTAMP WHERE id=?")

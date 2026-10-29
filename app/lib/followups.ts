@@ -40,6 +40,8 @@ export type FollowupPlan = {
     adherence: number | null;
     next: { start_ms: number; appointment_id: number | null; unpaid: boolean } | null;
   };
+  /** 'pro': propuesta por el profesional · 'patient': pedida por el paciente al reservar (ADR 0019). */
+  requested_by: "pro" | "patient";
   can: { accept: boolean; decline: boolean; cancel: boolean };
 };
 

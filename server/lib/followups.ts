@@ -7,7 +7,10 @@
  * tarjeta hasta 24 h antes (`paymentDeadline`); si no paga, el horario se libera solo (cron).
  * El título y la nota de la serie son datos de salud: solo para las dos partes, nunca en avisos.
  */
+import type { User } from "../env";
 import { BLOCK_SQL, OVERLAP_SQL } from "./appointments";
+import { planDates } from "./plan-templates";
+import type { PractitionerRow } from "./practitioners";
 import { DAY, HOUR, MINUTE, localWeekday, toLocalInput } from "./time";
 
 export const MAX_SESSIONS = 24;
@@ -91,3 +94,63 @@ export async function checkDates(db: D1Database, p: Pract, starts: number[], mod
   }
   return out;
 }
+
+/**
+ * Plan pedido por el paciente al reservar (ADR 0019): la sesión 1 es la cita reservada y las demás
+ * quedan propuestas con la misma hora, cada `interval_days`. Vence 24 h antes de la segunda sesión
+ * (máximo 7 días) si el profesional no responde.
+ */
+export async function createPatientPlan(
+  db: D1Database,
+  v: {
+    p: PractitionerRow;
+    patient: User;
+    patientName: string;
+    appointmentId: number;
+    start: number;
+    modality: "presencial" | "virtual";
+    priceCents: number;
+    plan: { title: string; template: string; interval_days: number; sessions: number };
+  },
+  now = Date.now(),
+) {
+  const dates = planDates(v.start, v.plan.interval_days, v.plan.sessions);
+  const expires = Math.max(now + HOUR, Math.min(now + 7 * DAY, dates[1] - DAY));
+  const row = await db
+    .prepare(
+      `INSERT INTO followup_plans(practitioner_id,patient_id,patient_name,title,note,modality,interval_days,price_cents,status,expires_ms,source_appointment_id,created_by,requested_by,template)
+       VALUES(?,?,?,?,'',?,?,?,'propuesta',?,?,?,'patient',?) RETURNING id`,
+    )
+    .bind(
+      v.p.id,
+      v.patient.id,
+      v.patientName,
+      v.plan.title,
+      v.modality,
+      v.plan.interval_days,
+      v.priceCents,
+      expires,
+      v.appointmentId,
+      v.patient.id,
+      v.plan.template,
+    )
+    .first<{ id: number }>();
+  const id = row!.id;
+  await db.batch(
+    dates.map((start, i) =>
+      i === 0
+        ? db.prepare("INSERT INTO followup_sessions(plan_id,seq,start_ms,appointment_id,status) VALUES(?,1,?,?,'agendada')").bind(id, start, v.appointmentId)
+        : db.prepare("INSERT INTO followup_sessions(plan_id,seq,start_ms,status) VALUES(?,?,?,'propuesta')").bind(id, i + 1, start),
+    ),
+  );
+  return id;
+}
+
+/** La primera cita de un plan pedido por el paciente no se realizó: el plan pendiente se cancela. */
+export const cancelPendingPlanFor = (db: D1Database, appointmentId: number, reason: string) =>
+  db
+    .prepare(
+      `UPDATE followup_plans SET status='cancelada',cancel_reason=?,updated_at=CURRENT_TIMESTAMP
+       WHERE status='propuesta' AND requested_by='patient' AND id IN (SELECT plan_id FROM followup_sessions WHERE appointment_id=? AND seq=1)`,
+    )
+    .bind(reason, appointmentId);

@@ -10,6 +10,7 @@ Las migraciones de `migrations/` se aplican **solas** en el primer request tras 
 | `0004_cms_media.sql` | CMS (sitio, versiones, auditoría, permisos, moderación) y medios |
 | `0005_perfiles_muestra.sql` | 12 perfiles de muestra con horarios (marcados `demo=1`, sin registro profesional ni opiniones) |
 | `0006_pasarelas.sql` | Pasarelas de pago configurables (`payment_gateways`) y `payments.gateway` |
+| `0009_planes_desde_reserva.sql` | Planes de consultas pedidos al reservar (`followup_plans.requested_by`, `template`) |
 | `0008_liquidaciones_subsecuentes.sql` | Comisión editable, libro de liquidación (`earnings`, `payouts`), cuenta cifrada del profesional y citas subsecuentes (`followup_plans`, `followup_sessions`) |
 | `0007_trazabilidad.sql` | Trazabilidad: `care_stages`, `stage_ratings`, `appointments.trace_token`, `practitioners.reception_token` |
 

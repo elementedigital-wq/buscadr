@@ -930,3 +930,102 @@ describe("citas subsecuentes", () => {
     expect((await patient.browser.get(`/api/followups/${p2.data.id}`)).data.plan.summary).toMatchObject({ upcoming: 2, conflicts: 0 });
   });
 });
+
+describe("plan de consultas pedido al reservar", () => {
+  it("el paciente reserva con un plan de pediatría, paga la primera y el profesional lo acepta (se agendan las siguientes)", async () => {
+    const { pro, id } = await publishedPractitioner();
+    const patient = await register("patient");
+    const bad = await patient.browser.post("/api/appointments", {
+      practitioner_id: id,
+      start: weekday(2, 9),
+      modality: "presencial",
+      idempotency_key: key(),
+      plan: { template: "no-existe" },
+    });
+    expect(bad.status).toBe(400);
+    expect(
+      (
+        await patient.browser.post("/api/appointments", {
+          practitioner_id: 4,
+          start: weekday(2, 9),
+          modality: "presencial",
+          idempotency_key: key(),
+          plan: { template: "control-mensual" },
+        })
+      ).status,
+    ).toBe(400);
+    const res = await patient.browser.post("/api/appointments", {
+      practitioner_id: id,
+      start: weekday(2, 9),
+      modality: "presencial",
+      idempotency_key: key(),
+      plan: { template: "nino-sano-lactante" },
+    });
+    expect(res.status).toBe(201);
+    const planId = res.data.plan_id;
+    expect(planId).toBeGreaterThan(0);
+    const mine = await patient.browser.get(`/api/followups/${planId}`);
+    expect(mine.data.plan).toMatchObject({
+      requested_by: "patient",
+      status: "propuesta",
+      status_label: "Esperando al profesional",
+      title: "Control de niño sano (primer año)",
+      can: { accept: false, cancel: true },
+    });
+    expect(mine.data.plan.sessions).toHaveLength(6);
+    expect(mine.data.plan.sessions[0].appointment_id).toBe(res.data.id);
+    expect(mine.data.plan.sessions[1].start_ms - mine.data.plan.sessions[0].start_ms).toBe(28 * 86_400_000);
+    expect((await patient.browser.post(`/api/followups/${planId}/accept`)).status).toBe(409);
+    // El profesional no acepta antes de que se pague la primera consulta.
+    const early = await pro.browser.post(`/api/pro/followups/${planId}/accept`);
+    expect(early.data.code).toBe("FIRST_UNPAID");
+    const payId = String(res.data.checkout).split("/").pop();
+    expect((await patient.browser.post(`/api/payments/${payId}/sandbox`, CARD)).data.status).toBe("aprobado");
+    const panel = await pro.browser.get("/api/pro/followups");
+    const req = panel.data.plans.find((p: { id: number }) => p.id === planId);
+    expect(req).toMatchObject({ status_label: "Solicitud del paciente", can: { accept: true, decline: true, cancel: false } });
+    const ok = await pro.browser.post(`/api/pro/followups/${planId}/accept`);
+    expect(ok.data).toMatchObject({ scheduled: 5, conflicts: 0 });
+    const first = await db.prepare("SELECT status FROM appointments WHERE id=?").bind(res.data.id).first<{ status: string }>();
+    expect(first?.status).toBe("confirmada");
+    const view = await patient.browser.get(`/api/followups/${planId}`);
+    expect(view.data.plan.status).toBe("activa");
+    expect(view.data.plan.summary).toMatchObject({ total: 6, upcoming: 6, unpaid: 5 });
+    const notes = (await patient.browser.get("/api/me/notifications")).data.items;
+    const accepted = notes.find((n: { kind: string }) => n.kind === "plan_aceptado");
+    expect(accepted.body).toContain("6 consultas");
+    expect(JSON.stringify(notes)).not.toContain("niño sano");
+  });
+
+  it("plan armado a mano: el profesional lo rechaza y la cita se mantiene; retirarlo o rechazar la cita cancela el plan", async () => {
+    const { pro, id } = await publishedPractitioner();
+    const patient = await register("patient");
+    expect(
+      (
+        await patient.browser.post("/api/appointments", {
+          practitioner_id: id,
+          start: weekday(3, 9),
+          modality: "virtual",
+          idempotency_key: key(),
+          plan: { interval_days: 45, sessions: 3 },
+        })
+      ).status,
+    ).toBe(400);
+    const a = await bookPaid(patient, { practitioner_id: id, start: weekday(3, 9), modality: "virtual", plan: { interval_days: 90, sessions: 3 } });
+    const planA = a.created.plan_id;
+    expect((await patient.browser.get(`/api/followups/${planA}`)).data.plan.title).toBe("Plan trimestral de 3 consultas");
+    expect((await pro.browser.post(`/api/pro/followups/${planA}/cancel`)).status).toBe(409);
+    expect((await pro.browser.post(`/api/pro/followups/${planA}/decline`, { reason: "Lo definimos en consulta" })).status).toBe(200);
+    expect((await db.prepare("SELECT status FROM appointments WHERE id=?").bind(a.id).first<{ status: string }>())?.status).toBe("solicitada");
+    expect((await patient.browser.get(`/api/appointments/${a.id}`)).data.appointment.followup).toBeNull();
+    // Retirar la solicitud.
+    const b = await bookPaid(patient, { practitioner_id: id, start: weekday(3, 10), modality: "virtual", plan: { interval_days: 30, sessions: 2 } });
+    expect((await patient.browser.post(`/api/followups/${b.created.plan_id}/cancel`)).status).toBe(200);
+    expect((await patient.browser.get(`/api/followups/${b.created.plan_id}`)).data.plan.status).toBe("cancelada");
+    expect((await db.prepare("SELECT status FROM appointments WHERE id=?").bind(b.id).first<{ status: string }>())?.status).toBe("solicitada");
+    // El profesional rechaza la primera cita: el plan pendiente se cancela.
+    const d = await bookPaid(patient, { practitioner_id: id, start: weekday(3, 11), modality: "virtual", plan: { template: "crecimiento-desarrollo" } });
+    expect((await pro.browser.post(`/api/appointments/${d.id}/actions/decline`, { reason: "Sin disponibilidad" })).status).toBe(200);
+    expect((await pro.browser.get(`/api/followups/${d.created.plan_id}`)).data.plan.status).toBe("cancelada");
+  });
+});

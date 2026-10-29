@@ -6,7 +6,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { type ApiError, api } from "../lib/api";
-import { addDays, dayParts, money, timeOf, toLocalDate } from "../lib/format";
+import {
+  FEATURED_PLAN_SPECIALTIES,
+  PLAN_FREQUENCIES,
+  PLAN_MAX_SESSIONS,
+  PLAN_MIN_SESSIONS,
+  frequencyName,
+  planDates,
+  templatesFor,
+} from "../../server/lib/plan-templates";
+import { addDays, dayParts, money, shortDate, timeOf, toLocalDate } from "../lib/format";
 import type { PublicPractitioner, Slot } from "../lib/types";
 import { Icon } from "./Icon";
 import { useRootData } from "../root";
@@ -42,6 +51,13 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
   const [date, setDate] = useState<string | null>(null);
   const [slot, setSlot] = useState<number | null>(null);
   const [reason, setReason] = useState("");
+  // Plan de consultas programadas (ADR 0019): cita única o plan por plantilla o armado a mano.
+  const templates = templatesFor(p.specialty);
+  const featured = FEATURED_PLAN_SPECIALTIES.includes(p.specialty);
+  const [planMode, setPlanMode] = useState<"single" | "plan">("single");
+  const [planChoice, setPlanChoice] = useState<string>(templates[0]?.id ?? "custom");
+  const [customInterval, setCustomInterval] = useState(30);
+  const [customSessions, setCustomSessions] = useState(4);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const key = useRef(`${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`);
@@ -50,6 +66,19 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
   // Solo tarjeta (ADR 0016): toda cita con tarifa se paga con tarjeta de crédito o débito al reservar.
   const cardOk = (root?.catalog.gateways ?? []).length > 0 || p.demo;
   const online = price > 0;
+  const chosenTemplate = templates.find((t) => t.id === planChoice);
+  const plan =
+    planMode === "plan" && !p.demo
+      ? chosenTemplate
+        ? { title: chosenTemplate.title, interval_days: chosenTemplate.interval_days, sessions: chosenTemplate.sessions, body: { template: chosenTemplate.id } }
+        : {
+            title: `Plan ${frequencyName(customInterval).toLowerCase()}`,
+            interval_days: customInterval,
+            sessions: customSessions,
+            body: { interval_days: customInterval, sessions: customSessions },
+          }
+      : null;
+  const dates = plan && slot ? planDates(slot, plan.interval_days, plan.sessions) : [];
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +125,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
     setError(null);
     try {
       const res = await api<{ id: number; checkout: string | null }>("/api/appointments", {
-        body: { practitioner_id: p.id, start: slot, modality, reason, idempotency_key: key.current },
+        body: { practitioner_id: p.id, start: slot, modality, reason, idempotency_key: key.current, ...(plan ? { plan: plan.body } : {}) },
       });
       if (res.checkout) {
         if (/^https?:/.test(res.checkout)) window.location.assign(res.checkout);
@@ -148,8 +177,86 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
         </fieldset>
       )}
 
+      {!p.demo && (
+        <fieldset className="mt-4">
+          <legend className="text-sm font-semibold">Tipo de consulta</legend>
+          <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de consulta">
+            {(
+              [
+                ["single", "Cita única", "calendar-check"],
+                ["plan", "Plan de consultas", "repeat"],
+              ] as const
+            ).map(([m, label, icon]) => (
+              <button key={m} type="button" role="radio" aria-checked={planMode === m} onClick={() => setPlanMode(m)} className="pill rounded-2xl py-2.5">
+                <Icon name={icon} className="size-4" /> {label}
+              </button>
+            ))}
+          </div>
+          {featured && planMode === "single" && (
+            <p className="mt-2 text-xs muted">¿Necesitas controles periódicos? Arma un plan de consultas programadas con este profesional.</p>
+          )}
+          {planMode === "plan" && (
+            <div className="mt-3 space-y-2">
+              <div className="grid gap-2" role="radiogroup" aria-label="Plan de consultas">
+                {[
+                  ...templates.map((t) => ({ ...t, custom: false })),
+                  { id: "custom", title: "Armar mi plan", hint: "Elige la frecuencia y cuántas consultas", custom: true, interval_days: 0, sessions: 0 },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={planChoice === t.id}
+                    onClick={() => setPlanChoice(t.id)}
+                    className={`flex min-w-0 items-start gap-3 rounded-2xl p-3 text-left ring-1 transition ${planChoice === t.id ? "bg-white ring-2 ring-azul" : "bg-white ring-tinta/10 hover:ring-azul/40"}`}
+                  >
+                    <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${t.custom ? "tone-verde" : "tone-azul"}`} aria-hidden>
+                      <Icon name={t.custom ? "sliders" : "calendar-days"} className="size-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold break-words">{t.title}</span>
+                      <span className="block text-xs muted">
+                        {t.custom ? t.hint : `${frequencyName(t.interval_days)} · ${t.sessions} consultas · ${t.hint}`}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {planChoice === "custom" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="field">
+                    Frecuencia
+                    <select className="input" value={customInterval} onChange={(e) => setCustomInterval(Number(e.target.value))}>
+                      {PLAN_FREQUENCIES.map(([d, l]) => (
+                        <option key={d} value={d}>
+                          {l}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    Consultas
+                    <select className="input" value={customSessions} onChange={(e) => setCustomSessions(Number(e.target.value))}>
+                      {Array.from({ length: PLAN_MAX_SESSIONS - PLAN_MIN_SESSIONS + 1 }, (_, i) => i + PLAN_MIN_SESSIONS).map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
+              <p className="text-xs muted">
+                Plan orientativo: tu profesional lo acepta o lo ajusta en la consulta. La primera cita es el horario que elijas abajo; las siguientes quedan el
+                mismo día de la semana y a la misma hora.
+              </p>
+            </div>
+          )}
+        </fieldset>
+      )}
+
       <div className="mt-5 flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold">Elige el día</p>
+        <p className="text-sm font-semibold">{plan ? "Elige el día de la primera consulta" : "Elige el día"}</p>
         <div className="flex gap-1.5">
           <button
             type="button"
@@ -220,6 +327,29 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
         )}
       </div>
 
+      {plan && slot && (
+        <div className="mt-2 rounded-2xl bg-fondo p-3">
+          <p className="text-sm font-semibold">
+            Tu plan: {plan.sessions} consultas · {frequencyName(plan.interval_days).toLowerCase()}
+          </p>
+          <ol className="mt-2 grid gap-1 text-sm">
+            {dates.map((ms, i) => (
+              <li key={ms} className="flex min-w-0 items-center gap-2">
+                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white text-xs font-bold ring-1 ring-tinta/10">{i + 1}</span>
+                <span className="min-w-0 truncate">
+                  {shortDate(ms)}, {timeOf(ms)}
+                  {i === 0 ? " · reservas ahora" : ""}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {online && (
+            <p className="mt-2 text-xs muted">
+              Hoy pagas solo la primera ({money(price)}). Cuando el profesional acepte el plan, cada consulta siguiente se paga con tarjeta hasta 24 h antes.
+            </p>
+          )}
+        </div>
+      )}
       {online && (
         <p className="mt-2 flex items-start gap-2 rounded-2xl bg-celeste/60 p-3 text-xs">
           <Icon name="card" className="mt-0.5 size-4 shrink-0 text-azul-ink" />
@@ -261,6 +391,7 @@ export function BookingCalendar({ p, loggedIn, bookLabel = "Agendar cita" }: { p
               </p>
               <p className="text-white/80">
                 {modality === "virtual" ? "Virtual" : "Presencial"} · {price ? money(price) : "Tarifa por confirmar"}
+                {plan ? ` · plan de ${plan.sessions} consultas` : ""}
                 {online ? " · pago con tarjeta" : ""}
               </p>
             </>

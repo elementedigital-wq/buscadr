@@ -44,14 +44,14 @@ export default function Citas({ loaderData }: Route.ComponentProps) {
             <Link
               key={p.id}
               to={`/seguimientos/${p.id}`}
-              className={`card flex min-w-0 items-center gap-3 p-4 transition hover:ring-azul/30 ${p.status === "propuesta" ? "ring-2 ring-azul/40" : ""}`}
+              className={`card flex min-w-0 items-center gap-3 p-4 transition hover:ring-azul/30 ${p.can.accept ? "ring-2 ring-azul/40" : ""}`}
             >
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl tone-azul" aria-hidden>
                 <Icon name="repeat" className="size-5" />
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block font-bold break-words">
-                  {p.status === "propuesta" ? "Nueva propuesta: " : ""}
+                  {p.can.accept ? "Nueva propuesta: " : ""}
                   {p.title}
                 </span>
                 <span className="block text-sm muted">
@@ -59,7 +59,7 @@ export default function Citas({ loaderData }: Route.ComponentProps) {
                   {p.summary.unpaid ? ` · ${p.summary.unpaid} por pagar` : ""}
                 </span>
               </span>
-              <StatusBadge status={p.status} label={p.status === "propuesta" ? "Responder" : p.status_label} />
+              <StatusBadge status={p.status} label={p.can.accept ? "Responder" : p.status_label} />
             </Link>
           ))}
         </section>

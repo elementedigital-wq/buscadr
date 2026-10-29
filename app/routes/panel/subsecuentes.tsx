@@ -42,7 +42,7 @@ export async function loader({ request, context }: Route.LoaderArgs) {
 
 const TABS = [
   ["curso", "En curso"],
-  ["propuestas", "Propuestas"],
+  ["propuestas", "Propuestas y solicitudes"],
   ["otras", "Finalizadas y otras"],
 ] as const;
 
@@ -411,6 +411,21 @@ function PlanCard({ plan: p }: { plan: FollowupPlan }) {
     }
   }
 
+  async function respond(action: "accept" | "decline") {
+    const reason = action === "decline" ? prompt("¿Quieres contarle al paciente por qué? (opcional)", "") : "";
+    if (reason === null) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/api/pro/followups/${p.id}/${action}`, { body: { reason } });
+      revalidator.revalidate();
+    } catch (e) {
+      setError((e as ApiError).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function reschedule(seq: number, start: string) {
     setBusy(true);
     setError(null);
@@ -494,6 +509,21 @@ function PlanCard({ plan: p }: { plan: FollowupPlan }) {
           ))}
         </ol>
       </details>
+      {p.can.accept && (
+        <div className="space-y-2 rounded-2xl bg-celeste/50 p-3">
+          <p className="text-sm">
+            El paciente pidió este plan al reservar. Al aceptarlo se agendan las consultas siguientes (y se confirma la primera si aún esperaba).
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn btn-sm" onClick={() => respond("accept")} disabled={busy}>
+              <Icon name="check" className="size-4" /> Aceptar plan
+            </button>
+            <button type="button" className="btn-outline btn-sm" onClick={() => respond("decline")} disabled={busy}>
+              Rechazar plan
+            </button>
+          </div>
+        </div>
+      )}
       {p.can.cancel && (
         <button type="button" className="btn-outline btn-sm" onClick={cancel} disabled={busy}>
           <Icon name="x" className="size-4" /> {p.status === "propuesta" ? "Retirar propuesta" : "Cancelar lo que falta"}

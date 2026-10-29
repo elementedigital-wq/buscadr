@@ -41,6 +41,8 @@ import { priceFor } from "../lib/pricing";
 import { getPayoutSettings } from "../lib/settings";
 import { RULES, hit } from "../lib/rate-limit";
 import { notifyNewRequest, notifyPatient, refundPayment } from "../lib/settle";
+import { cancelPendingPlanFor, createPatientPlan } from "../lib/followups";
+import { readPlanRequest } from "../lib/plan-templates";
 import { daySlots, type Modality } from "../lib/slots";
 import { DAY, MINUTE, formatLong, localDate, parseLocal } from "../lib/time";
 import { whatsappLink } from "../lib/whatsapp";
@@ -232,6 +234,8 @@ appointments.post("/", async (c) => {
     reason?: string;
     patient_name?: string;
     idempotency_key?: string;
+    /** Plan de consultas programadas pedido al reservar (ADR 0019). */
+    plan?: unknown;
   }>(c);
   const key = String(b.idempotency_key ?? "");
   if (!/^[A-Za-z0-9_-]{12,80}$/.test(key)) fail(400, "Falta la clave de la solicitud. Recarga la página e inténtalo de nuevo.");
@@ -252,6 +256,10 @@ appointments.post("/", async (c) => {
   const now = Date.now();
   await assertOffered(db, p, start, modality, now);
 
+  // Plan de consultas programadas (ADR 0019): se valida antes de reservar la primera consulta.
+  const planReq = b.plan ? readPlanRequest(b.plan, p.specialty) : null;
+  if (planReq && "error" in planReq) fail(400, planReq.error);
+  if (planReq && p.demo) fail(400, "Los perfiles de muestra no admiten planes de consultas.");
   const reason = clean(b.reason, 160);
   const basePrice = modality === "virtual" ? p.price_virtual_cents : p.price_in_person_cents;
   // Solo tarjeta (ADR 0016): toda cita con tarifa se paga con tarjeta al reservar; buscaDR cobra y
@@ -287,6 +295,19 @@ appointments.post("/", async (c) => {
   }
   const id = inserted.id;
   await event(db, id, status === "confirmada" ? "creada_confirmada" : "solicitada", user.id, { modality, online }).run();
+  const planId =
+    planReq && "plan" in planReq
+      ? await createPatientPlan(db, {
+          p,
+          patient: user,
+          patientName: clean(b.patient_name, 80) || user.name,
+          appointmentId: id,
+          start,
+          modality,
+          priceCents: price.price_cents,
+          plan: planReq.plan,
+        })
+      : null;
   await track(db, status === "confirmada" ? "booking_confirmed" : "booking_requested", {
     userId: user.id,
     appointmentId: id,
@@ -339,7 +360,7 @@ appointments.post("/", async (c) => {
       ]).then(() => undefined),
     );
   }
-  return c.json({ id, status, demo: !!p.demo, checkout }, 201);
+  return c.json({ id, status, demo: !!p.demo, checkout, plan_id: planId }, 201);
 });
 
 /* ------------------------------------------------------------------ Listas y detalle */
@@ -347,7 +368,7 @@ appointments.post("/", async (c) => {
 const LIST_SELECT = `SELECT a.id,a.status,a.start_ms,a.end_ms,a.modality,a.price_cents,a.net_cents,a.payment_mode,a.payment_status,a.hold_expires_ms,a.patient_name,a.created_at,
   p.slug,p.title,p.display_name,p.specialty,p.photo,p.city,p.sector,p.demo,
   (SELECT COUNT(*) FROM messages m WHERE m.appointment_id=a.id) AS messages,
-  (SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) FROM followup_sessions s WHERE s.appointment_id=a.id) AS followup
+  (SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) FROM followup_sessions s JOIN followup_plans f ON f.id=s.plan_id WHERE s.appointment_id=a.id AND f.status IN ('propuesta','activa')) AS followup
   FROM appointments a JOIN practitioners p ON p.id=a.practitioner_id`;
 
 /** «plan:sesión:total» → referencia a la serie de citas subsecuentes (ADR 0017). */
@@ -427,7 +448,7 @@ appointments.get("/:id", async (c) => {
   ]);
   const followup = await db
     .prepare(
-      "SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) AS v FROM followup_sessions s WHERE s.appointment_id=?",
+      "SELECT s.plan_id || ':' || s.seq || ':' || (SELECT COUNT(*) FROM followup_sessions t WHERE t.plan_id=s.plan_id) AS v FROM followup_sessions s JOIN followup_plans f ON f.id=s.plan_id WHERE s.appointment_id=? AND f.status IN ('propuesta','activa')",
     )
     .bind(a.id)
     .first<{ v: string }>();
@@ -576,6 +597,7 @@ appointments.post("/:id/actions/:action", async (c) => {
       await transition(db, a, TRANSITIONS.decline.to, { cancel_reason: clean(input.reason, 280) || "El profesional no tiene disponibilidad" });
       const paid = await approvedPayment(db, a.id);
       if (paid) await refundPayment(c.env, paid, "Cita no aceptada por el profesional");
+      await cancelPendingPlanFor(db, a.id, "La primera consulta no fue aceptada").run();
       c.executionCtx.waitUntil(
         notifyPatient(
           c.env,
@@ -593,6 +615,7 @@ appointments.post("/:id/actions/:action", async (c) => {
         cancel_reason: `${role === "patient" ? "Paciente" : "Profesional"}: ${clean(input.reason, 260) || "sin motivo"}`,
         hold_expires_ms: null,
       });
+      await cancelPendingPlanFor(db, a.id, "Se canceló la primera consulta").run();
       const paid = await approvedPayment(db, a.id);
       // Reembolso: siempre si cancela el profesional; si cancela el paciente, hasta 4 h antes.
       const refundable = paid && (role !== "patient" || Date.now() <= a.start_ms - FREE_CANCEL_MS);

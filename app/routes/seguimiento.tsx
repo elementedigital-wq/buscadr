@@ -68,8 +68,16 @@ export default function Seguimiento({ loaderData }: Route.ComponentProps) {
     });
   };
 
+  const withdraw = p.status === "propuesta" && p.requested_by === "patient";
   const cancel = () => {
-    if (!confirm("¿Cancelar las citas que faltan de esta serie? Las pagadas se reembolsan (las de las próximas 4 h puedes cancelarlas una a una).")) return;
+    if (
+      !confirm(
+        withdraw
+          ? "¿Retirar tu solicitud de plan? Tu primera cita se mantiene."
+          : "¿Cancelar las citas que faltan de esta serie? Las pagadas se reembolsan (las de las próximas 4 h puedes cancelarlas una a una).",
+      )
+    )
+      return;
     run("cancel", async () => {
       await api(`/api/followups/${p.id}/cancel`, { body: { reason: "Cancelada por el paciente" } });
       revalidator.revalidate();
@@ -122,6 +130,13 @@ export default function Seguimiento({ loaderData }: Route.ComponentProps) {
         {done && <Notice tone="success">{done}</Notice>}
         {error && <Notice tone="danger">{error}</Notice>}
 
+        {withdraw && (
+          <Notice tone="info" title="Esperando al profesional">
+            Pediste este plan al reservar. Tu primera consulta ya está reservada; cuando {p.practitioner.name} acepte el plan, agendamos las siguientes
+            {p.price_cents ? " y pagas cada una con tarjeta hasta 24 h antes" : ""}.
+            {p.expires_ms ? ` Si no responde antes del ${dateTime(p.expires_ms)}, la solicitud vence.` : ""}
+          </Notice>
+        )}
         {p.can.accept && (
           <div className="space-y-3 rounded-2xl bg-celeste/60 p-4">
             <p className="text-sm">
@@ -185,7 +200,7 @@ export default function Seguimiento({ loaderData }: Route.ComponentProps) {
         </ol>
         {p.can.cancel && (
           <button type="button" className="btn-outline btn-sm mt-3" onClick={cancel} disabled={busy !== null}>
-            <Icon name="x" className="size-4" /> Cancelar las citas que faltan
+            <Icon name="x" className="size-4" /> {withdraw ? "Retirar solicitud" : "Cancelar las citas que faltan"}
           </button>
         )}
       </section>

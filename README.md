@@ -2,7 +2,7 @@
 
 Directorio médico y plataforma de citas para Ecuador: pacientes encuentran médicos, especialistas, clínicas y servicios de salud, comparan tarifas **presenciales y virtuales** y agendan en un calendario que el profesional confirma. Cada profesional tiene su **panel de citas**, avisos por **WhatsApp** y cobros registrados con **buscaDR Pay**. Piloto en Guayaquil, Samborondón, Daule, Quito y Cuenca.
 
-> v1.4 (28-oct-2026): cobro solo con tarjeta con liquidación al profesional (comisión editable en el CMS) y panel de citas subsecuentes. v1.3: trazabilidad de la atención con QR (reserva, llegada, consulta y cierre) y satisfacción de 1 a 5 por etapa. v1.2: 83 especialidades en 11 categorías (ampliables desde el CMS) y pasarelas de pago configurables al estilo WooCommerce, sobre Cloudflare Workers + D1. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
+> v1.5 (29-oct-2026): plan de consultas programadas al reservar (plantillas por especialidad o armado por el paciente). v1.4 (28-oct-2026): cobro solo con tarjeta con liquidación al profesional (comisión editable en el CMS) y panel de citas subsecuentes. v1.3: trazabilidad de la atención con QR (reserva, llegada, consulta y cierre) y satisfacción de 1 a 5 por etapa. v1.2: 83 especialidades en 11 categorías (ampliables desde el CMS) y pasarelas de pago configurables al estilo WooCommerce, sobre Cloudflare Workers + D1. Ver `CHANGELOG.md` y `docs/ANALISIS_2026.md`.
 
 ## Qué incluye
 

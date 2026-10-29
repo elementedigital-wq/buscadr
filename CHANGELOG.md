@@ -1,5 +1,12 @@
 # Cambios
 
+## 1.5.0 — 29-oct-2026 · Plan de consultas programadas desde la reserva (ADR 0019)
+- **«Agenda tu cita» → Tipo de consulta: Cita única o Plan de consultas**, después de elegir Presencial o Virtual.
+- **Plantillas por especialidad:** pediatría (niño sano, crecimiento y desarrollo, control escolar), cardiología (presión arterial, seguimiento cercano, ritmo cardíaco), oftalmología (presión ocular, control visual infantil, retina en diabetes), nefrología (función renal), neurología (control trimestral o semestral, dolor de cabeza) y medicina interna (diabetes, presión arterial, crónicos). Dos plantillas genéricas para las demás especialidades.
+- **«Armar mi plan»**, como la recurrencia de YANK: frecuencia (semanal a semestral) y de 2 a 12 consultas, con vista previa de las fechas (mismo día de la semana y misma hora).
+- Hoy se paga solo la primera consulta. El profesional acepta o rechaza el plan en **Panel → Subsecuentes → Propuestas y solicitudes**; al aceptarlo se agendan las siguientes y cada una se paga con tarjeta hasta 24 h antes. El paciente sigue su plan en Mis citas y puede retirarlo.
+- Migración aditiva `0009_planes_desde_reserva.sql`. 63 pruebas. Maquetación (8 anchos) y accesibilidad sin problemas, y recorrido en navegador de la reserva con plan hasta la aceptación del médico.
+
 ## 1.4.1 — 28-oct-2026 · Superusuarios del CMS Maestro (ADR 0018)
 - **CMS → Acceso y contraseña → Superusuarios** (solo el propietario): agregar cuentas con acceso completo al CMS y a la administración (correo, nombre y contraseña inicial de 12+ caracteres, guardada solo como hash) y retirarlas (se cierran sus sesiones).
 - Los superusuarios entran en `/maestro`, cambian su contraseña y la recuperan por correo. No pueden gestionar otros superusuarios.
